@@ -1,0 +1,99 @@
+"use server"
+
+import ExcelJS from "exceljs"
+import path from "path"
+import fs from "fs"
+import { spawn } from "child_process"
+
+export async function getMachines() {
+    const filePath = path.join(process.cwd(), "..", "Inventaire_Parc.xlsx")
+
+    if (!fs.existsSync(filePath)) return []
+
+    try {
+        const stats = fs.statSync(filePath)
+        if (stats.size === 0) return []
+
+        const workbook = new ExcelJS.Workbook()
+        await workbook.xlsx.readFile(filePath)
+
+        // Trouver la feuille par nom (insensible à la casse et souple)
+        let sheet = workbook.getWorksheet("Serveurs et postes clients")
+        if (!sheet) {
+            sheet = workbook.worksheets.find(w => w.name && w.name.includes("Serveurs"))
+        }
+        if (!sheet) sheet = workbook.worksheets[0]
+
+        const machines = []
+        for (let c = 2; c <= 200; c++) {
+            const name = sheet.getRow(1).getCell(c).text?.trim()
+            if (!name) continue
+
+            // FILTRE STRICT : Uniquement les machines avec "OUI"
+            const statusScan = sheet.getRow(2).getCell(c).text?.trim()
+            if (statusScan !== "OUI") continue
+
+            const disks = []
+            for (let r = 23; r <= 36; r++) {
+                const diskInfo = sheet.getCell(r, c).text
+                if (diskInfo) disks.push(diskInfo)
+            }
+
+            machines.push({
+                id: c,
+                name: name,
+                manufacturer: sheet.getCell(4, c).text,
+                model: sheet.getCell(5, c).text,
+                service_tag: sheet.getCell(9, c).text,
+                os: sheet.getCell(11, c).text,
+                cpu: sheet.getCell(13, c).text,
+                ram: sheet.getCell(15, c).text,
+                gpu: sheet.getCell(16, c).text,
+                disks: disks,
+                last_scan: new Date().toISOString()
+            })
+        }
+        return machines
+    } catch (error) {
+        console.error("Error reading Excel for list:", error)
+        return []
+    }
+}
+
+export async function triggerScan(action: 'Local' | 'AD' | 'IPRange' | 'Target', target?: string) {
+    const scriptPath = path.join(process.cwd(), "..", "script_fiche_synthèse_poste_serveur.ps1")
+
+    return new Promise((resolve, reject) => {
+        const args = [
+            "-NoProfile",
+            "-ExecutionPolicy", "Bypass",
+            "-File", scriptPath,
+            "-SilentMode",
+            "-Action", action
+        ]
+
+        if (target) {
+            args.push("-Target", target)
+        }
+
+        const ps = spawn("powershell.exe", args)
+
+        ps.stdout.on("data", (data: any) => console.log(`PS: ${data}`))
+        ps.stderr.on("data", (data: any) => console.error(`PS Error: ${data}`))
+
+        ps.on("close", (code: number) => {
+            if (code === 0) resolve({ success: true })
+            else reject(new Error(`Processus PowerShell terminé avec le code ${code}`))
+        })
+    })
+}
+
+export async function getImportInfo() {
+    const p = path.join(process.cwd(), "..", "import_info.json")
+    if (fs.existsSync(p)) {
+        try {
+            return JSON.parse(fs.readFileSync(p, "utf-8"))
+        } catch { return null }
+    }
+    return null
+}
