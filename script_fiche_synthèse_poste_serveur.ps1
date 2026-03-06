@@ -7,7 +7,12 @@
 #>
 
 param(
-    [string]$OutputFile = "$PSScriptRoot\Inventaire_Parc.xlsx"
+    [string]$OutputFile = "$PSScriptRoot\Inventaire_Parc.xlsx",
+    [string]$ApiUrl = "http://127.0.0.1:3000/api/scan/submit",
+    [string]$ApiKey = "***CLE-REVOQUEE***",
+    [switch]$SilentMode,
+    [string]$Action, # Local, AD, IPRange, Target
+    [string]$Target  # Nom ou IP pour l'action Target
 )
 
 Function Get-MachineInfo {
@@ -105,6 +110,12 @@ Function Write-ToExcel {
         [PSCustomObject]$MachineInfo
     )
     
+    if ($SilentMode) {
+        Write-Host "Mode Silencieux : L'écriture Excel sera gérée par l'API Web pour éviter les conflits." -ForegroundColor Gray
+        return
+    }
+
+    $excel = $null
     if (-not $MachineInfo) { return }
 
     $excel = New-Object -ComObject Excel.Application
@@ -176,8 +187,14 @@ Function Write-ToExcel {
         if ($targetCol -eq 0) { $targetCol = 2 }
 
         Write-Host "Écriture pour $machineName dans la colonne $targetCol" -ForegroundColor Green
+        
+        # S'assurer que le label du status est présent en colonne A
+        if ($sheet.Cells.Item(2, 1).Text -eq "") {
+            $sheet.Cells.Item(2, 1).Value2 = "Status Scan"
+        }
 
         $sheet.Cells.Item(1, $targetCol).Value2 = $MachineInfo.NOM
+        $sheet.Cells.Item(2, $targetCol).Value2 = "OUI"
         $sheet.Cells.Item(3, $targetCol).Value2 = $MachineInfo.GROUPE_DOMAINE
         $sheet.Cells.Item(4, $targetCol).Value2 = $MachineInfo.FABRICANT
         $sheet.Cells.Item(5, $targetCol).Value2 = $MachineInfo.MODELE
@@ -223,6 +240,51 @@ Function Write-ToExcel {
     }
 }
 
+Function Send-ToApi {
+    param (
+        [PSCustomObject]$MachineInfo
+    )
+    
+    # Liste des ports à tester (si 3000 est occupé, Next.js prend souvent 3001)
+    $potentialPorts = @(3000, 3001)
+    $effectiveUrl = $null
+
+    Write-Host "Recherche du serveur Web actif..." -ForegroundColor Cyan
+    foreach ($port in $potentialPorts) {
+        $testUrl = "http://127.0.0.1:$port/api/ping"
+        try {
+            # Test de ping ultra-rapide
+            $ping = Invoke-RestMethod -Uri $testUrl -Method Get -TimeoutSec 1 -ErrorAction SilentlyContinue
+            if ($ping.ping -eq "pong") {
+                $effectiveUrl = "http://127.0.0.1:$port/api/scan/submit"
+                Write-Host "[+] Serveur trouvé sur le port $port" -ForegroundColor Green
+                break
+            }
+        }
+        catch {}
+    }
+
+    if ($null -eq $effectiveUrl) {
+        Write-Warning "[!] Aucun serveur Novadis SCAN actif n'a été trouvé sur les ports 3000 ou 3001."
+        Write-Host "Veuillez vérifier que 'npm run dev' est bien lancé." -ForegroundColor Yellow
+        return
+    }
+
+    Write-Host "Synchronisation avec l'interface Web ($effectiveUrl)..." -ForegroundColor Cyan
+    try {
+        $json = $MachineInfo | ConvertTo-Json -Depth 10
+        $headers = @{
+            "x-api-key"    = $ApiKey
+            "Content-Type" = "application/json"
+        }
+        Invoke-RestMethod -Uri $effectiveUrl -Method Post -Body $json -Headers $headers | Out-Null
+        Write-Host "Synchronisation réussie pour $($MachineInfo.NOM)" -ForegroundColor Green
+    }
+    catch {
+        Write-Warning "Échec de la synchronisation Web : $($_.Exception.Message)"
+    }
+}
+
 Function Get-ComputersFromAD {
     Write-Host "Recherche des machines CLT* et SRV* dans l'Active Directory..." -ForegroundColor Cyan
     try {
@@ -261,8 +323,54 @@ Function Get-ComputersByIPRange {
     return $reachableIPs
 }
 
-# --- MENU PRINCIPAL ---
+# --- LOGIQUE D'EXÉCUTION ---
+
+if ($SilentMode) {
+    Write-Host "Mode Silencieux activé. Action : $Action" -ForegroundColor Yellow
+    switch ($Action) {
+        "Local" {
+            $info = Get-MachineInfo -ComputerName "localhost"
+            if ($info) {
+                Write-ToExcel -FilePath $OutputFile -MachineInfo $info
+                Send-ToApi -MachineInfo $info
+            }
+        }
+        "AD" {
+            $machines = Get-ComputersFromAD
+            foreach ($comp in $machines) {
+                $info = Get-MachineInfo -ComputerName $comp
+                if ($info) {
+                    Write-ToExcel -FilePath $OutputFile -MachineInfo $info
+                    Send-ToApi -MachineInfo $info
+                }
+            }
+        }
+        "IPRange" {
+            $ips = Get-ComputersByIPRange
+            foreach ($ip in $ips) {
+                $info = Get-MachineInfo -ComputerName $ip
+                if ($info) {
+                    Write-ToExcel -FilePath $OutputFile -MachineInfo $info
+                    Send-ToApi -MachineInfo $info
+                }
+            }
+        }
+        "Target" {
+            if ($Target) {
+                $info = Get-MachineInfo -ComputerName $Target
+                if ($info) {
+                    Write-ToExcel -FilePath $OutputFile -MachineInfo $info
+                    Send-ToApi -MachineInfo $info
+                }
+            }
+        }
+    }
+    exit
+}
+
+# --- MENU PRINCIPAL (Interactif) ---
 do {
+    # ... (reste du menu existant)
     Clear-Host
     Write-Host "======================================================" -ForegroundColor Cyan
     Write-Host "      Outil d'Inventaire Matériel & Logiciel          " -ForegroundColor Cyan
@@ -282,6 +390,7 @@ do {
             $info = Get-MachineInfo -ComputerName "localhost"
             if ($info) {
                 Write-ToExcel -FilePath $OutputFile -MachineInfo $info
+                Send-ToApi -MachineInfo $info
                 Write-Host "Fini ! Consultez $OutputFile" -ForegroundColor Green
             }
             pause
@@ -296,6 +405,7 @@ do {
                     $info = Get-MachineInfo -ComputerName $comp
                     if ($info) {
                         Write-ToExcel -FilePath $OutputFile -MachineInfo $info
+                        Send-ToApi -MachineInfo $info
                     }
                 }
                 Write-Host "Scan AD terminé !" -ForegroundColor Green
@@ -318,6 +428,7 @@ do {
                         # L'utilisateur a demandé de repérer CLT/SRV, mais ici on scanne des plages précises.
                         # On va tout garder, le nom s'affichera dans l'Excel.
                         Write-ToExcel -FilePath $OutputFile -MachineInfo $info
+                        Send-ToApi -MachineInfo $info
                     }
                 }
                 Write-Host "Scan des plages IP terminé !" -ForegroundColor Green
@@ -333,6 +444,7 @@ do {
             $info = Get-MachineInfo -ComputerName $comp
             if ($info) {
                 Write-ToExcel -FilePath $OutputFile -MachineInfo $info
+                Send-ToApi -MachineInfo $info
                 Write-Host "Fini !" -ForegroundColor Green
             }
             pause
