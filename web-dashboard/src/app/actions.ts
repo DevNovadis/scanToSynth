@@ -97,3 +97,42 @@ export async function getImportInfo() {
     }
     return null
 }
+
+export async function deleteMachines(ids: number[]) {
+    const rootPath = path.join(process.cwd(), "..")
+    const filePath = path.join(rootPath, "Inventaire_Parc.xlsx")
+    const scriptPath = path.join(process.cwd(), "DeleteInExcel.ps1")
+
+    if (!fs.existsSync(filePath)) {
+        return { success: false, error: "Fichier inventaire non trouvé." }
+    }
+
+    return new Promise((resolve) => {
+        const psArgs = [
+            "-NoProfile",
+            "-ExecutionPolicy", "Bypass",
+            "-File", scriptPath,
+            "-InventairePath", filePath,
+            "-Ids", ids.join(",")
+        ]
+
+        const ps = spawn("powershell.exe", psArgs)
+        let output = ""
+        let errorOutput = ""
+
+        ps.stdout.on("data", (data) => output += data.toString())
+        ps.stderr.on("data", (data) => errorOutput += data.toString())
+
+        ps.on("close", (code) => {
+            if (code === 0 && output.includes("SUCCESS")) {
+                resolve({ success: true })
+            } else {
+                let msg = errorOutput || output || "Erreur lors de l'exécution PowerShell"
+                if (msg.includes("EBUSY") || msg.includes("permission denied")) {
+                    msg = "Le fichier Excel est probablement ouvert. Fermez-le et réessayez."
+                }
+                resolve({ success: false, error: msg })
+            }
+        })
+    })
+}

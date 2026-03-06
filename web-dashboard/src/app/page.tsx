@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useState, useRef } from "react"
-import { getMachines, triggerScan, getImportInfo } from "@/app/actions"
+import { getMachines, triggerScan, getImportInfo, deleteMachines } from "@/app/actions"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -51,6 +51,8 @@ export default function HomePage() {
   const [uploadSuccess, setUploadSuccess] = useState(false)
   const [resetting, setResetting] = useState(false)
   const [importInfo, setImportInfo] = useState<{ filename: string, date: string } | null>(null)
+  const [selectedIds, setSelectedIds] = useState<number[]>([])
+  const [deleting, setDeleting] = useState(false)
 
   const fileInputRef = useRef<HTMLInputElement>(null)
 
@@ -154,6 +156,42 @@ export default function HomePage() {
     m.os.toLowerCase().includes(search.toLowerCase())
   )
 
+  const toggleSelect = (id: number, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation()
+    setSelectedIds(prev =>
+      prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]
+    )
+  }
+
+  const toggleSelectAll = () => {
+    if (selectedIds.length === filteredMachines.length) {
+      setSelectedIds([])
+    } else {
+      setSelectedIds(filteredMachines.map(m => m.id))
+    }
+  }
+
+  const handleDeleteSelected = async () => {
+    if (selectedIds.length === 0) return
+    if (!confirm(`Voulez-vous vraiment supprimer les ${selectedIds.length} machines sélectionnées ?`)) return
+
+    setDeleting(true)
+    try {
+      const res = await deleteMachines(selectedIds) as { success: boolean, error?: string }
+      if (res.success) {
+        setSelectedIds([])
+        await loadData()
+      } else {
+        alert("Erreur lors de la suppression : " + (res.error || "Réponse invalide"))
+      }
+    } catch (error) {
+      console.error(error)
+      alert("Erreur lors de la suppression : " + (error instanceof Error ? error.message : String(error)))
+    } finally {
+      setDeleting(false)
+    }
+  }
+
   return (
     <div className="space-y-8 animate-in fade-in duration-500">
       {/* Dynamic Scan Toolbar */}
@@ -236,6 +274,35 @@ export default function HomePage() {
             />
           </div>
 
+          {filteredMachines.length > 0 && (
+            <div className="flex flex-col gap-2">
+              <Button
+                variant="ghost"
+                size="sm"
+                className="justify-start px-2 font-semibold text-xs text-muted-foreground hover:text-primary"
+                onClick={toggleSelectAll}
+              >
+                <div className={`w-4 h-4 rounded border-2 mr-2 flex items-center justify-center transition-colors ${selectedIds.length === filteredMachines.length && filteredMachines.length > 0 ? 'bg-primary border-primary' : 'border-muted-foreground/30'}`}>
+                  {selectedIds.length === filteredMachines.length && filteredMachines.length > 0 && <CheckCircle2 className="h-3 w-3 text-primary-foreground" />}
+                </div>
+                {selectedIds.length === filteredMachines.length ? "Tout décocher" : "Tout cocher"}
+              </Button>
+
+              {selectedIds.length > 0 && (
+                <Button
+                  variant="destructive"
+                  size="sm"
+                  className="rounded-xl w-full gap-2 animate-in slide-in-from-left duration-200"
+                  onClick={handleDeleteSelected}
+                  disabled={deleting}
+                >
+                  <Trash2 className="h-4 w-4" />
+                  Supprimer sélection ({selectedIds.length})
+                </Button>
+              )}
+            </div>
+          )}
+
           <div className="space-y-3">
             <h3 className="font-semibold text-sm uppercase tracking-wider text-muted-foreground">Gestion Excel</h3>
 
@@ -294,8 +361,8 @@ export default function HomePage() {
 
         <div className="md:col-span-3">
           {loading && machines.length === 0 ? (
-            <div className="grid gap-4 sm:grid-cols-2">
-              {[1, 2, 3, 4].map(i => (
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              {[1, 2, 3, 4, 5, 6].map(i => (
                 <div key={i} className="h-32 rounded-2xl bg-muted animate-pulse" />
               ))}
             </div>
@@ -306,16 +373,26 @@ export default function HomePage() {
               <p className="text-sm text-muted-foreground/60 max-w-xs mt-1">Utilisez les outils ci-dessus pour scanner des machines ou importez un fichier existant.</p>
             </div>
           ) : (
-            <div className="grid gap-4 sm:grid-cols-2">
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
               {filteredMachines.map((m) => (
                 <Dialog key={m.id}>
                   <DialogTrigger asChild>
                     <Card
-                      className="rounded-2xl border-muted/20 hover:border-primary/40 transition-all hover:shadow-md cursor-pointer group overflow-hidden"
+                      className={`rounded-2xl border-muted/20 transition-all hover:shadow-md cursor-pointer group overflow-hidden relative ${selectedIds.includes(m.id) ? 'ring-2 ring-primary border-primary/40 bg-primary/5' : 'hover:border-primary/40'}`}
                       onClick={() => setSelectedMachine(m)}
                     >
+                      {/* Checkbox Overlay */}
+                      <div
+                        className="absolute top-4 left-4 z-10"
+                        onClick={(e) => toggleSelect(m.id, e)}
+                      >
+                        <div className={`w-6 h-6 rounded-lg border-2 flex items-center justify-center transition-all ${selectedIds.includes(m.id) ? 'bg-primary border-primary scale-110 shadow-lg' : 'bg-background/80 border-muted-foreground/30 group-hover:border-primary/50'}`}>
+                          {selectedIds.includes(m.id) && <CheckCircle2 className="h-4 w-4 text-primary-foreground" />}
+                        </div>
+                      </div>
+
                       <div className="h-1 w-full bg-muted group-hover:bg-primary transition-colors" />
-                      <CardContent className="p-5">
+                      <CardContent className="p-5 pt-12">
                         <div className="flex items-start justify-between">
                           <div className="flex items-center gap-3">
                             <div className={`p-2 rounded-xl ${m.name.startsWith('SRV') ? 'bg-blue-500/10 text-blue-500' : 'bg-green-500/10 text-green-500'}`}>
