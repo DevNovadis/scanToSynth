@@ -37,12 +37,8 @@ export async function POST(req: NextRequest) {
 
             // Récupérer toutes les valeurs de la ligne 1 à 150
             for (let r = 1; r <= 150; r++) {
-                if (r === 2) {
-                    valeurs.push(null) // Ligne "Status Scan", on force "non scanné"
-                } else {
-                    const v = uploadedSheet.getCell(r, c).value
-                    valeurs.push(v !== undefined ? v : null)
-                }
+                const v = uploadedSheet.getCell(r, c).value
+                valeurs.push(v !== undefined ? v : null)
             }
 
             machinesData.push({

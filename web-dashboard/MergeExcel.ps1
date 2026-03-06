@@ -37,12 +37,9 @@ try {
         }
         
         if ($sheet) {
-            # WIPE 20 columns of model data
-            for ($c = 2; $c -le 20; $c++) {
-                for ($r = 1; $r -le 150; $r++) {
-                    try { $sheet.Cells.Item($r, $c).Value2 = "" } catch {}
-                }
-            }
+            # WIPE 20 columns of model data en un seul bloc
+            $wipeRange = $sheet.Range($sheet.Cells.Item(1, 2), $sheet.Cells.Item(150, 21))
+            $wipeRange.Value2 = $null
         }
         $workbook.Save()
     }
@@ -57,45 +54,74 @@ try {
     
     if (-not $sheet) { Write-Error "Sheet not found."; exit 1 }
 
+    # OPTIMISATION : Lire la première ligne (noms des machines) d'un coup pour éviter les appels répétés
+    # On lit de la colonne 2 à 250
+    $headerRange = $sheet.Range($sheet.Cells.Item(1, 2), $sheet.Cells.Item(1, 250))
+    $headers = $headerRange.Value2 # Retourne un tableau 2D [1, 249] ou $null si vide
+
     foreach ($machine in @($data)) {
         $name = $machine.NOM
-        if (-not $name) { continue }
+        # Force le nom en string pour la comparaison
+        $nameStr = if ($null -ne $name) { $name.ToString().Trim() } else { "" }
+        if ($nameStr -eq "") { continue }
         
-        # Find column
+        # Find column dans le tableau $headers (en mémoire, ultra rapide)
         $targetCol = 0
-        for ($c = 2; $c -le 250; $c++) {
-            $v = $sheet.Cells.Item(1, $c).Text
-            if ($v -eq $name) { $targetCol = $c; break }
-        }
-        
-        if ($targetCol -eq 0) {
-            for ($c = 2; $c -le 250; $c++) {
-                $v = $sheet.Cells.Item(1, $c).Text
-                if (-not $v -or $v.Trim() -eq "") { $targetCol = $c; break }
+        if ($null -ne $headers) {
+            for ($i = 1; $i -le 249; $i++) {
+                $v = $headers[1, $i]
+                if ($null -ne $v -and $v.ToString().Trim() -eq $nameStr) { 
+                    $targetCol = $i + 1 # +1 car on a commencé à la colonne 2
+                    break 
+                }
             }
         }
+        
+        # Si pas trouvé, chercher la première colonne vide
+        if ($targetCol -eq 0) {
+            if ($null -eq $headers) {
+                $targetCol = 2 # Première colonne disponible
+            }
+            else {
+                for ($i = 1; $i -le 249; $i++) {
+                    $v = $headers[1, $i]
+                    if ($null -eq $v -or $v.ToString().Trim() -eq "") {
+                        $targetCol = $i + 1
+                        # Mettre à jour l'en-tête en mémoire pour les suivantes
+                        $headers[1, $i] = $nameStr
+                        break
+                    }
+                }
+            }
+        }
+        
         if ($targetCol -eq 0) { $targetCol = 2 }
 
-        # Copy Format
+        # Copy Format si nécessaire
         if ($targetCol -gt 2) {
             $sheet.Columns.Item(2).Copy() | Out-Null
             $sheet.Columns.Item($targetCol).PasteSpecial(-4122) | Out-Null
-            # $excel.CutCopyMode = $false
         }
 
-        # Clear and Write
-        for ($r = 1; $r -le 150; $r++) {
-            try { $sheet.Cells.Item($r, $targetCol).Value2 = "" } catch {}
-        }
-        
-        $r = 1
+        # OPTIMISATION : Préparer un tableau 2D pour l'écriture en bloc (150 lignes, 1 colonne)
+        $valArray = New-Object "object[,]" 150, 1
+        $r_idx = 0
         foreach ($val in @($machine.VALEURS)) {
-            if ($val -ne $null -and $val -ne "") {
-                $sheet.Cells.Item($r, $targetCol).Value2 = $val
+            if ($r_idx -ge 150) { break }
+            if ($null -ne $val -and $val.ToString().Trim() -ne "") {
+                $valArray[$r_idx, 0] = $val
             }
-            $r++
+            else {
+                $valArray[$r_idx, 0] = $null
+            }
+            $r_idx++
         }
-        Write-Host "Wrote machine $name to column $targetCol"
+
+        # Écriture en une seule opération COM
+        $targetRange = $sheet.Range($sheet.Cells.Item(1, $targetCol), $sheet.Cells.Item(150, $targetCol))
+        $targetRange.Value2 = $valArray
+        
+        Write-Host "Wrote machine $nameStr to column $targetCol (Optimized)"
     }
 
     $workbook.Save()
@@ -103,8 +129,12 @@ try {
 }
 catch {
     Write-Error "Excel Error: $_"
+    exit 1 # CRITIQUE : Retourner un code d'erreur pour que l'API sache que ça a échoué
 }
 finally {
-    if ($workbook) { $workbook.Close($false) }
-    if ($excel) { $excel.Quit() }
+    if ($null -ne $workbook) { $workbook.Close($false) }
+    if ($null -ne $excel) { 
+        $excel.Quit() 
+        [System.Runtime.Interopservices.Marshal]::ReleaseComObject($excel) | Out-Null
+    }
 }
