@@ -1,6 +1,7 @@
 import ExcelJS from "exceljs"
 import path from "path"
 import fs from "fs"
+import { loadXlsxSafe } from "./xlsx-reader"
 
 // ---------- Types ----------
 export interface MachineData {
@@ -70,7 +71,23 @@ export async function getWorkbook(): Promise<ExcelJS.Workbook> {
             await workbook.xlsx.load(buf)
             return workbook
         }
-        // No file in blob yet -> create a clean workbook (no template to avoid ExcelJS column overflow)
+        // No file in blob yet -> charger le template avec correction des dimensions
+        const templatePath = localTemplatePath()
+        if (fs.existsSync(templatePath)) {
+            const templateBuf = fs.readFileSync(templatePath)
+            const templateWb = await loadXlsxSafe(templateBuf)
+            // Vider les colonnes de données (2-21) en gardant les labels en colonne A
+            const sheet = findSheet(templateWb)
+            if (sheet) {
+                for (let c = 2; c <= 21; c++) {
+                    for (let r = 1; r <= 150; r++) {
+                        sheet.getCell(r, c).value = null
+                    }
+                }
+            }
+            return templateWb
+        }
+        // Fallback: workbook vierge
         workbook.addWorksheet("Serveurs et postes clients")
         return workbook
     }

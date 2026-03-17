@@ -5,6 +5,9 @@ const nextConfig: NextConfig = {
     ignoreBuildErrors: true,
   },
   serverExternalPackages: ["exceljs"],
+  outputFileTracingIncludes: {
+    "/**": ["./data/**"],
+  },
 };
 
 export default nextConfig;
