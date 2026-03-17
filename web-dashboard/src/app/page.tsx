@@ -1,7 +1,7 @@
 "use client"
 
-import { useEffect, useState, useRef } from "react"
-import { getMachines, triggerScan, getImportInfo, deleteMachines } from "@/app/actions"
+import { useEffect, useState } from "react"
+import { getMachines, triggerScan, deleteMachines } from "@/app/actions"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -19,7 +19,6 @@ import {
   Info,
   HardDrive,
   Settings,
-  Upload,
   CheckCircle2,
   Trash2,
   Terminal,
@@ -49,17 +48,11 @@ export default function HomePage() {
   const [loading, setLoading] = useState(true)
   const [scanning, setScanning] = useState(false)
   const [downloading, setDownloading] = useState(false)
-  const [uploading, setUploading] = useState(false)
   const [selectedMachine, setSelectedMachine] = useState<any>(null)
-  const [uploadSuccess, setUploadSuccess] = useState(false)
-  const [resetting, setResetting] = useState(false)
-  const [importInfo, setImportInfo] = useState<{ filename: string, date: string } | null>(null)
   const [selectedIds, setSelectedIds] = useState<number[]>([])
   const [deleting, setDeleting] = useState(false)
   const [showScanHelp, setShowScanHelp] = useState(false)
   const [copied, setCopied] = useState(false)
-
-  const fileInputRef = useRef<HTMLInputElement>(null)
 
   const scanCommand = `powershell -ExecutionPolicy Bypass -Command "& { irm 'https://raw.githubusercontent.com/Gartalgart/scanToSynth/master/web-dashboard/scan-to-cloud.ps1' -OutFile $env:TEMP\\scan.ps1; & $env:TEMP\\scan.ps1 }"`
 
@@ -72,9 +65,8 @@ export default function HomePage() {
   const loadData = async () => {
     setLoading(true)
     try {
-      const [m, info] = await Promise.all([getMachines(), getImportInfo()])
+      const m = await getMachines()
       setMachines(m)
-      setImportInfo(info)
     } finally {
       setLoading(false)
     }
@@ -124,48 +116,22 @@ export default function HomePage() {
     }
   }
 
-  const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
-    if (!file) return
-
-    setUploading(true)
-    const formData = new FormData()
-    formData.append("file", file)
-
+  const handleDeleteOne = async (id: number, name: string, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation()
+    if (!confirm(`Supprimer la machine "${name}" ?`)) return
+    setDeleting(true)
     try {
-      const response = await fetch('/api/excel/upload', {
-        method: 'POST',
-        body: formData,
-      })
-      if (!response.ok) {
-        const errData = await response.json()
-        throw new Error(errData.error || "Erreur lors de l'importation")
+      const res = await deleteMachines([id]) as { success: boolean, error?: string }
+      if (res.success) {
+        setSelectedIds(prev => prev.filter(i => i !== id))
+        await loadData()
+      } else {
+        alert("Erreur : " + (res.error || "Échec"))
       }
-
-      setUploadSuccess(true)
-      setTimeout(() => setUploadSuccess(false), 3000)
-      await loadData()
     } catch (error) {
-      console.error(error)
-      alert("Erreur lors de l'importation du fichier.")
+      alert("Erreur : " + (error instanceof Error ? error.message : String(error)))
     } finally {
-      setUploading(false)
-      if (fileInputRef.current) fileInputRef.current.value = ""
-    }
-  }
-
-  const handleReset = async () => {
-    if (!confirm("Voulez-vous vraiment retirer le fichier importé ? Les données scannées seront conservées.")) return
-    setResetting(true)
-    try {
-      const response = await fetch('/api/excel/upload', { method: 'DELETE' })
-      if (!response.ok) throw new Error('Échec de la réinitialisation')
-      await loadData()
-    } catch (error) {
-      console.error(error)
-      alert("Erreur lors de la réinitialisation.")
-    } finally {
-      setResetting(false)
+      setDeleting(false)
     }
   }
 
@@ -318,25 +284,7 @@ export default function HomePage() {
           )}
 
           <div className="space-y-3">
-            <h3 className="font-semibold text-sm uppercase tracking-wider text-muted-foreground">Gestion Excel</h3>
-
-            <input
-              type="file"
-              accept=".xlsx"
-              className="hidden"
-              ref={fileInputRef}
-              onChange={handleUpload}
-            />
-
-            <Button
-              className="w-full rounded-xl gap-2 font-bold py-6 bg-blue-500/10 text-blue-500 hover:bg-blue-500/20 border-blue-500/20"
-              variant="outline"
-              onClick={() => fileInputRef.current?.click()}
-              disabled={uploading}
-            >
-              {uploadSuccess ? <CheckCircle2 className="h-5 w-5" /> : <Upload className="h-5 w-5" />}
-              {uploading ? "Importation..." : uploadSuccess ? "Importé !" : "Importer Fichier"}
-            </Button>
+            <h3 className="font-semibold text-sm uppercase tracking-wider text-muted-foreground">Export</h3>
 
             <Button
               className="w-full rounded-xl gap-2 font-bold py-6"
@@ -345,31 +293,8 @@ export default function HomePage() {
               disabled={downloading || machines.length === 0}
             >
               <Download className="h-5 w-5" />
-              Exporter (.xlsx)
+              {downloading ? "Export..." : "Exporter (.xlsx)"}
             </Button>
-
-            <Button
-              className="w-full rounded-xl gap-2 font-bold py-6 bg-red-500/10 text-red-500 hover:bg-red-500/20 border-red-500/20"
-              variant="outline"
-              onClick={handleReset}
-              disabled={resetting}
-            >
-              <Trash2 className="h-5 w-5" />
-              {resetting ? "Suppression..." : "Retirer l'import"}
-            </Button>
-
-            {importInfo && (
-              <div className="mt-4 p-4 rounded-xl bg-primary/5 border border-primary/10 animate-in slide-in-from-top duration-300">
-                <div className="flex items-center gap-2 text-xs font-bold text-primary mb-1">
-                  <FileSpreadsheet className="h-3 w-3" />
-                  IMPORTÉ
-                </div>
-                <p className="text-xs font-medium truncate">{importInfo.filename}</p>
-                <p className="text-[10px] text-muted-foreground mt-1">
-                  Le {new Date(importInfo.date).toLocaleDateString()}
-                </p>
-              </div>
-            )}
           </div>
         </div>
 
@@ -402,6 +327,16 @@ export default function HomePage() {
                       >
                         <div className={`w-6 h-6 rounded-lg border-2 flex items-center justify-center transition-all ${selectedIds.includes(m.id) ? 'bg-primary border-primary scale-110 shadow-lg' : 'bg-background/80 border-muted-foreground/30 group-hover:border-primary/50'}`}>
                           {selectedIds.includes(m.id) && <CheckCircle2 className="h-4 w-4 text-primary-foreground" />}
+                        </div>
+                      </div>
+
+                      {/* Delete button */}
+                      <div
+                        className="absolute top-4 right-4 z-10 opacity-0 group-hover:opacity-100 transition-opacity"
+                        onClick={(e) => handleDeleteOne(m.id, m.name, e)}
+                      >
+                        <div className="w-7 h-7 rounded-lg bg-red-500/10 hover:bg-red-500/20 flex items-center justify-center transition-colors">
+                          <Trash2 className="h-4 w-4 text-red-500" />
                         </div>
                       </div>
 
@@ -500,7 +435,16 @@ export default function HomePage() {
                         </div>
                       )}
 
-                      <div className="mt-6 pt-6 border-t flex justify-end">
+                      <div className="mt-6 pt-6 border-t flex justify-between">
+                        <Button
+                          variant="destructive"
+                          className="rounded-xl gap-2"
+                          disabled={deleting}
+                          onClick={() => handleDeleteOne(selectedMachine.id, selectedMachine.name)}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                          Supprimer
+                        </Button>
                         <Button variant="secondary" className="rounded-xl px-10" onClick={() => setSelectedMachine(null)}>
                           Fermer
                         </Button>
