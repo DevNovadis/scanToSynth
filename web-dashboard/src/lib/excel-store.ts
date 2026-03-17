@@ -11,7 +11,7 @@ export interface MachineData {
 // ---------- Helpers Vercel Blob (dynamic import to avoid errors in local dev) ----------
 async function blobPut(pathname: string, body: Buffer | Uint8Array): Promise<string> {
     const { put } = await import("@vercel/blob")
-    const result = await put(pathname, body, { access: "public", addRandomSuffix: false })
+    const result = await put(pathname, body, { access: "private", addRandomSuffix: false })
     return result.url
 }
 
