@@ -8,7 +8,11 @@ export async function getMachines() {
     try {
         const workbook = await getWorkbook()
         const sheet = findSheet(workbook)
-        if (!sheet) return []
+        if (!sheet) {
+            console.log("[getMachines] No sheet found")
+            return []
+        }
+        console.log("[getMachines] Sheet found:", sheet.name, "- worksheets:", workbook.worksheets.map(w => w.name))
 
         const machines = []
         for (let c = 2; c <= 200; c++) {
@@ -16,6 +20,7 @@ export async function getMachines() {
             if (!name) continue
 
             const statusScan = sheet.getRow(2).getCell(c).text?.trim()
+            console.log(`[getMachines] Col ${c}: name="${name}", status="${statusScan}"`)
             if (statusScan !== "OUI") continue
 
             const disks = []
