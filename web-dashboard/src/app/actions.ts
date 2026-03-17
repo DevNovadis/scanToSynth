@@ -8,7 +8,10 @@ import { spawn } from "child_process"
 export async function getMachines() {
     const filePath = path.join(process.cwd(), "data", "Inventaire_Parc.xlsx")
 
-    if (!fs.existsSync(filePath)) return []
+    if (!fs.existsSync(filePath)) {
+        console.warn(`[WARN] Fichier inventaire non trouvé : ${filePath}`)
+        return []
+    }
 
     try {
         const stats = fs.statSync(filePath)
