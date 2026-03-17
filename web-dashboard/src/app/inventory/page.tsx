@@ -9,8 +9,7 @@ import {
     Monitor,
     Server as ServerIcon,
     Cpu,
-    HardDrive,
-    ExternalLink
+    HardDrive
 } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 

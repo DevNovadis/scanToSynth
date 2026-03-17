@@ -1,10 +1,7 @@
 "use client"
 
 import Link from "next/link"
-import { FileSpreadsheet, KeyRound } from "lucide-react"
 import { ModeToggle } from "@/components/mode-toggle"
-
-const navItems: any[] = []
 
 export function Navbar() {
     return (

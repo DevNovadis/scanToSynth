@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import path from "path"
 import fs from "fs"
 
-export async function GET(req: NextRequest) {
+export async function GET() {
     try {
         const rootPath = path.join(process.cwd(), "..")
         const dataPath = path.join(rootPath, "Inventaire_Parc.xlsx")
