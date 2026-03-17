@@ -31,7 +31,8 @@ export default function InventoryPage() {
     const filteredMachines = machines.filter(m =>
         m.name.toLowerCase().includes(search.toLowerCase()) ||
         m.os.toLowerCase().includes(search.toLowerCase()) ||
-        m.service_tag.toLowerCase().includes(search.toLowerCase())
+        m.service_tag.toLowerCase().includes(search.toLowerCase()) ||
+        (m.ip && m.ip.toLowerCase().includes(search.toLowerCase()))
     )
 
     return (
@@ -80,7 +81,10 @@ export default function InventoryPage() {
                                         {m.name.startsWith("SRV") ? "Serveur" : "Client"}
                                     </Badge>
                                 </div>
-                                <CardDescription>{m.os}</CardDescription>
+                                <CardDescription className="flex flex-col gap-0.5">
+                                    <span>{m.os}</span>
+                                    {m.ip && <span className="text-[10px] font-mono text-primary/70">{m.ip}</span>}
+                                </CardDescription>
                             </CardHeader>
                             <CardContent className="pt-4 space-y-3">
                                 <div className="flex items-center gap-2 text-sm">

@@ -153,7 +153,8 @@ export default function HomePage() {
 
   const filteredMachines = machines.filter(m =>
     m.name.toLowerCase().includes(search.toLowerCase()) ||
-    m.os.toLowerCase().includes(search.toLowerCase())
+    m.os.toLowerCase().includes(search.toLowerCase()) ||
+    (m.ip && m.ip.toLowerCase().includes(search.toLowerCase()))
   )
 
   const toggleSelect = (id: number, e?: React.MouseEvent) => {
@@ -401,6 +402,7 @@ export default function HomePage() {
                             <div>
                               <p className="font-bold text-lg leading-none">{m.name}</p>
                               <p className="text-xs text-muted-foreground mt-1 truncate max-w-[150px]">{m.os}</p>
+                              {m.ip && <p className="text-[10px] font-mono text-primary/70 mt-0.5">{m.ip}</p>}
                             </div>
                           </div>
                           <div className="flex flex-col items-end gap-1">

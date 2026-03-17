@@ -46,6 +46,7 @@ export async function getMachines() {
                 model: sheet.getCell(5, c).text,
                 service_tag: sheet.getCell(9, c).text,
                 os: sheet.getCell(11, c).text,
+                ip: sheet.getCell(46, c).text, // Première IP trouvée
                 cpu: sheet.getCell(13, c).text,
                 ram: sheet.getCell(15, c).text,
                 gpu: sheet.getCell(16, c).text,
