@@ -1,7 +1,6 @@
 import ExcelJS from "exceljs"
 import path from "path"
 import fs from "fs"
-import { loadXlsxSafe } from "./xlsx-reader"
 
 // ---------- Types ----------
 export interface MachineData {
@@ -54,45 +53,131 @@ const isVercel = !!process.env.VERCEL
 function localInventairePath() {
     return path.join(process.cwd(), "data", "Inventaire_Parc.xlsx")
 }
-function localTemplatePath() {
-    return path.join(process.cwd(), "data", "Modèle_fiche_synthèse.xlsx")
-}
 function localImportInfoPath() {
     return path.join(process.cwd(), "data", "import_info.json")
 }
 
+// ---------- Row labels for column A (matching template) ----------
+const ROW_LABELS: Record<number, string> = {
+    1: "NOM",
+    2: "STATUT SCAN",
+    3: "GROUPE DE TRAVAIL OU DOMAINE",
+    4: "FABRICANT DU SYSTÈME",
+    5: "MODELE DU SYSTÈME",
+    6: "DOMAINE DE SURETE",
+    7: "FONCTIONS",
+    8: "SERVEUR NTP",
+    9: "SERVICE TAG",
+    10: "FIN DE GARANTIE",
+    11: "SYSTÈME D'EXPLOITATION",
+    12: "TYPE DU SYSTÈME",
+    13: "PROCESSEUR N° 1",
+    14: "PROCESSEUR N° 2",
+    15: "MÉMOIRE PHYSIQUE (RAM)",
+    16: "CARTE GRAPHIQUE N° 1",
+    17: "CARTE GRAPHIQUE N° 2",
+    19: "TAILLE DISQUE VIRTUEL 0",
+    20: "RAID DISQUE VIRTUEL 0",
+    21: "TAILLE DISQUE VIRTUEL 1",
+    22: "RAID DISQUE VIRTUEL 1",
+    23: "REFERENCE DU DISQUE 00",
+    24: "REFERENCE DU DISQUE 01",
+    25: "REFERENCE DU DISQUE 02",
+    26: "REFERENCE DU DISQUE 03",
+    27: "REFERENCE DU DISQUE 04",
+    28: "REFERENCE DU DISQUE 05",
+    29: "REFERENCE DU DISQUE 06",
+    30: "REFERENCE DU DISQUE 07",
+    31: "REFERENCE DU DISQUE 08",
+    32: "REFERENCE DU DISQUE 09",
+    33: "REFERENCE DU DISQUE 10",
+    34: "REFERENCE DU DISQUE 11",
+    35: "REFERENCE DU DISQUE 12",
+    36: "REFERENCE DU DISQUE 13",
+    37: "MONITEUR 1 CONNECTIQUE",
+    38: "MONITEUR 2 CONNECTIQUE",
+    39: "EQUIPEMENT TIERS N°1",
+    40: "EQUIPEMENT TIERS N°2",
+    41: "EQUIPEMENT TIERS N°3",
+    43: "CARTE RESEAU N°1 NOM",
+    44: "CARTE RESEAU N°1 REFERENCE",
+    45: "CARTE RESEAU N°1 MAC",
+    46: "CARTE RESEAU N°1 IP",
+    47: "CARTE RESEAU N°1 MASQUE",
+    48: "CARTE RESEAU N°1 PASSERELLE",
+    49: "CARTE RESEAU N°2 NOM",
+    50: "CARTE RESEAU N°2 REFERENCE",
+    51: "CARTE RESEAU N°2 MAC",
+    52: "CARTE RESEAU N°2 IP",
+    53: "CARTE RESEAU N°2 MASQUE",
+    54: "CARTE RESEAU N°2 PASSERELLE",
+    55: "CARTE RESEAU N°3 NOM",
+    56: "CARTE RESEAU N°3 REFERENCE",
+    57: "CARTE RESEAU N°3 MAC",
+    58: "CARTE RESEAU N°3 IP",
+    59: "CARTE RESEAU N°3 MASQUE",
+    60: "CARTE RESEAU N°3 PASSERELLE",
+    61: "CARTE RESEAU N°4 NOM",
+    62: "CARTE RESEAU N°4 REFERENCE",
+    63: "CARTE RESEAU N°4 MAC",
+    64: "CARTE RESEAU N°4 IP",
+    65: "CARTE RESEAU N°4 MASQUE",
+    66: "CARTE RESEAU N°4 PASSERELLE",
+}
+
+function createFormattedWorkbook(): ExcelJS.Workbook {
+    const workbook = new ExcelJS.Workbook()
+    const sheet = workbook.addWorksheet("Serveurs et postes clients")
+
+    // Set column A width
+    sheet.getColumn(1).width = 35
+
+    // Header style for labels
+    const labelFill: ExcelJS.FillPattern = {
+        type: "pattern",
+        pattern: "solid",
+        fgColor: { argb: "FF4472C4" },
+    }
+    const labelFont: Partial<ExcelJS.Font> = {
+        bold: true,
+        color: { argb: "FFFFFFFF" },
+        size: 10,
+    }
+    const borderStyle: Partial<ExcelJS.Borders> = {
+        top: { style: "thin" },
+        left: { style: "thin" },
+        bottom: { style: "thin" },
+        right: { style: "thin" },
+    }
+
+    // Write labels in column A with formatting
+    for (const [rowStr, label] of Object.entries(ROW_LABELS)) {
+        const row = parseInt(rowStr)
+        const cell = sheet.getCell(row, 1)
+        cell.value = label
+        cell.fill = labelFill
+        cell.font = labelFont
+        cell.border = borderStyle
+    }
+
+    return workbook
+}
+
 // ---------- Get the current workbook ----------
 export async function getWorkbook(): Promise<ExcelJS.Workbook> {
-    const workbook = new ExcelJS.Workbook()
-
     if (isVercel) {
         const buf = await blobGet("Inventaire_Parc.xlsx")
         if (buf) {
+            const workbook = new ExcelJS.Workbook()
             await workbook.xlsx.load(buf)
             return workbook
         }
-        // No file in blob yet -> charger le template avec correction des dimensions
-        const templatePath = localTemplatePath()
-        if (fs.existsSync(templatePath)) {
-            const templateBuf = fs.readFileSync(templatePath)
-            const templateWb = await loadXlsxSafe(templateBuf)
-            // Vider les colonnes de données (2-21) en gardant les labels en colonne A
-            const sheet = findSheet(templateWb)
-            if (sheet) {
-                for (let c = 2; c <= 21; c++) {
-                    for (let r = 1; r <= 150; r++) {
-                        sheet.getCell(r, c).value = null
-                    }
-                }
-            }
-            return templateWb
-        }
-        // Fallback: workbook vierge
-        workbook.addWorksheet("Serveurs et postes clients")
-        return workbook
+        // No file in blob yet -> create formatted workbook with labels
+        return createFormattedWorkbook()
     }
 
     // Local dev
+    const workbook = new ExcelJS.Workbook()
     const filePath = localInventairePath()
     if (fs.existsSync(filePath) && fs.statSync(filePath).size > 0) {
         await workbook.xlsx.readFile(filePath)
@@ -111,15 +196,42 @@ export async function saveWorkbook(workbook: ExcelJS.Workbook): Promise<void> {
     }
 }
 
-// ---------- Get workbook as buffer (for download) ----------
+// ---------- Get workbook as buffer (for download, with labels ensured) ----------
 export async function getWorkbookBuffer(): Promise<Buffer | null> {
-    if (isVercel) {
-        const buf = await blobGet("Inventaire_Parc.xlsx")
-        return buf
+    const workbook = await getWorkbook()
+    const sheet = findSheet(workbook)
+    if (!sheet) return null
+
+    // Ensure labels in column A are present
+    const labelFill: ExcelJS.FillPattern = {
+        type: "pattern",
+        pattern: "solid",
+        fgColor: { argb: "FF4472C4" },
     }
-    const filePath = localInventairePath()
-    if (!fs.existsSync(filePath)) return null
-    return fs.readFileSync(filePath)
+    const labelFont: Partial<ExcelJS.Font> = {
+        bold: true,
+        color: { argb: "FFFFFFFF" },
+        size: 10,
+    }
+    const borderStyle: Partial<ExcelJS.Borders> = {
+        top: { style: "thin" },
+        left: { style: "thin" },
+        bottom: { style: "thin" },
+        right: { style: "thin" },
+    }
+    for (const [rowStr, label] of Object.entries(ROW_LABELS)) {
+        const row = parseInt(rowStr)
+        const cell = sheet.getCell(row, 1)
+        if (!cell.value) {
+            cell.value = label
+        }
+        cell.fill = labelFill
+        cell.font = labelFont
+        cell.border = borderStyle
+    }
+    sheet.getColumn(1).width = 35
+
+    return Buffer.from(await workbook.xlsx.writeBuffer())
 }
 
 // ---------- Find the right sheet ----------
