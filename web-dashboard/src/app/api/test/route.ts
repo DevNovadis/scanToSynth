@@ -20,15 +20,15 @@ export async function GET() {
         results.blobError = e.message
     }
 
-    // Test 2: Download blob via get() + auth header (same as blobGet)
+    // Test 2: Download blob via getDownloadUrl (same as blobGet)
     try {
-        const { get } = await import("@vercel/blob")
-        const blob = await get("Inventaire_Parc.xlsx", {})
-        const res = await fetch(blob.url, {
-            headers: { Authorization: `Bearer ${process.env.BLOB_READ_WRITE_TOKEN}` }
-        })
+        const { list, getDownloadUrl } = await import("@vercel/blob")
+        const listResult = await list({ prefix: "Inventaire_Parc.xlsx", limit: 1 })
+        const blob = listResult.blobs[0]
+        const signedUrl = await getDownloadUrl(blob.url)
+        const res = await fetch(signedUrl)
         const buf = Buffer.from(await res.arrayBuffer())
-        results.downloadMethod = "get+auth"
+        results.downloadMethod = "getDownloadUrl"
         results.downloadSize = buf.length
         results.downloadStatus = res.status
 

@@ -16,17 +16,14 @@ async function blobPut(pathname: string, body: Buffer | Uint8Array): Promise<str
 }
 
 async function blobGet(pathname: string): Promise<Buffer | null> {
-    const { get } = await import("@vercel/blob")
-    try {
-        const blob = await get(pathname, {})
-        const res = await fetch(blob.url, {
-            headers: { Authorization: `Bearer ${process.env.BLOB_READ_WRITE_TOKEN}` }
-        })
-        if (!res.ok) return null
-        return Buffer.from(await res.arrayBuffer())
-    } catch {
-        return null // blob doesn't exist
-    }
+    const { list, getDownloadUrl } = await import("@vercel/blob")
+    const result = await list({ prefix: pathname, limit: 1 })
+    const blob = result.blobs.find(b => b.pathname === pathname)
+    if (!blob) return null
+    const signedUrl = await getDownloadUrl(blob.url)
+    const res = await fetch(signedUrl)
+    if (!res.ok) return null
+    return Buffer.from(await res.arrayBuffer())
 }
 
 async function blobDel(pathname: string): Promise<void> {
