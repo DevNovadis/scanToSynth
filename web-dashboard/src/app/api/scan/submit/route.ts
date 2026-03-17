@@ -1,7 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
-import path from "path"
-import fs from "fs"
-import { spawn } from "child_process"
+import { mergeMachines } from "@/lib/excel-store"
 
 export async function GET() { return NextResponse.json({ status: "OK" }) }
 
@@ -11,16 +9,11 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ error: "Non autorisé" }, { status: 401 })
     }
 
-    let tempJsonPath = ""
     try {
         const data = await req.json()
         const { NOM } = data
 
         if (!NOM) return NextResponse.json({ error: "Nom de machine manquant" }, { status: 400 })
-
-        const rootPath = path.join(process.cwd(), "data")
-        const filePath = path.join(rootPath, "Inventaire_Parc.xlsx")
-        const modelPath = path.join(rootPath, "Modèle_fiche_synthèse.xlsx")
 
         // Construire les valeurs exactes attendues de la ligne 1 à 150
         const valeurs = new Array(150).fill(null)
@@ -29,8 +22,8 @@ export async function POST(req: NextRequest) {
             if (v !== undefined && v !== null && v !== "") valeurs[r - 1] = v
         }
 
-        valeurs[0] = NOM // Ligne 1 (0-indexed)
-        valeurs[1] = "OUI" // Ligne 2 (0-indexed) "Status Scan"
+        valeurs[0] = NOM
+        valeurs[1] = "OUI"
         w(3, data.GROUPE_DOMAINE); w(4, data.FABRICANT); w(5, data.MODELE)
         w(8, data.SERVEUR_NTP); w(9, data.SERVICE_TAG)
         w(11, data.OS); w(12, data.TYPE_SYSTEM)
@@ -52,48 +45,10 @@ export async function POST(req: NextRequest) {
             })
         }
 
-        const machineData = [{ NOM: NOM, VALEURS: valeurs }]
+        await mergeMachines([{ NOM, VALEURS: valeurs }])
 
-        // Créer un fichier JSON temporaire
-        tempJsonPath = path.join(process.cwd(), `scan_data_${Date.now()}.json`)
-        fs.writeFileSync(tempJsonPath, JSON.stringify(machineData, null, 2))
-
-        // Appeler le script PowerShell COM
-        const scriptPath = path.join(process.cwd(), "MergeExcel.ps1")
-        const psOptions = [
-            "-NoProfile",
-            "-ExecutionPolicy", "Bypass",
-            "-File", scriptPath,
-            "-InventairePath", filePath,
-            "-ModelPath", modelPath,
-            "-DataJsonPath", tempJsonPath
-        ]
-
-        const psLogs: string[] = []
-        const psErrors: string[] = []
-        await new Promise((resolve, reject) => {
-            const ps = spawn("powershell.exe", psOptions)
-            ps.stdout.on("data", (d: any) => {
-                const log = d.toString()
-                console.log(`[Scan COM] ${log}`)
-                psLogs.push(log)
-            })
-            ps.stderr.on("data", (d: any) => {
-                const err = d.toString()
-                console.error(`[Scan COM Err] ${err}`)
-                psErrors.push(err)
-            })
-            ps.on("close", (code) => {
-                if (code === 0) resolve(true)
-                else reject(new Error("Erreur COM PowerShell: " + psErrors.join("\n")))
-            })
-        })
-
-        if (fs.existsSync(tempJsonPath)) fs.unlinkSync(tempJsonPath)
-
-        return NextResponse.json({ success: true, machine: NOM, log: psLogs.join("\n") })
+        return NextResponse.json({ success: true, machine: NOM })
     } catch (e: any) {
-        if (tempJsonPath && fs.existsSync(tempJsonPath)) fs.unlinkSync(tempJsonPath)
         console.error("ERREUR scan submit:", e.message)
         return NextResponse.json({ error: e.message || "Erreur interne" }, { status: 500 })
     }

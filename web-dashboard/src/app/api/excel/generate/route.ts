@@ -1,18 +1,13 @@
-import { NextRequest, NextResponse } from "next/server"
-import path from "path"
-import fs from "fs"
+import { NextResponse } from "next/server"
+import { getWorkbookBuffer } from "@/lib/excel-store"
 
 export async function GET() {
     try {
-        const rootPath = path.join(process.cwd(), "..")
-        const dataPath = path.join(rootPath, "Inventaire_Parc.xlsx")
+        const buffer = await getWorkbookBuffer()
 
-        if (!fs.existsSync(dataPath)) {
+        if (!buffer) {
             return NextResponse.json({ error: "Fichier inventaire non trouvé. Lancez un scan d'abord." }, { status: 404 })
         }
-
-        // Lire le fichier actuel directement pour le télécharger sans interférence
-        const buffer = fs.readFileSync(dataPath)
 
         return new NextResponse(buffer, {
             status: 200,

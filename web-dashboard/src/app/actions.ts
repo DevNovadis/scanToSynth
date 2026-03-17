@@ -1,38 +1,20 @@
 "use server"
 
-import ExcelJS from "exceljs"
+import { getWorkbook, findSheet, deleteMachineColumns, getImportInfo as _getImportInfo } from "@/lib/excel-store"
 import path from "path"
-import fs from "fs"
 import { spawn } from "child_process"
 
 export async function getMachines() {
-    const filePath = path.join(process.cwd(), "data", "Inventaire_Parc.xlsx")
-
-    if (!fs.existsSync(filePath)) {
-        console.warn(`[WARN] Fichier inventaire non trouvé : ${filePath}`)
-        return []
-    }
-
     try {
-        const stats = fs.statSync(filePath)
-        if (stats.size === 0) return []
-
-        const workbook = new ExcelJS.Workbook()
-        await workbook.xlsx.readFile(filePath)
-
-        // Trouver la feuille par nom (insensible à la casse et souple)
-        let sheet = workbook.getWorksheet("Serveurs et postes clients")
-        if (!sheet) {
-            sheet = workbook.worksheets.find(w => w.name && w.name.includes("Serveurs"))
-        }
-        if (!sheet) sheet = workbook.worksheets[0]
+        const workbook = await getWorkbook()
+        const sheet = findSheet(workbook)
+        if (!sheet) return []
 
         const machines = []
         for (let c = 2; c <= 200; c++) {
             const name = sheet.getRow(1).getCell(c).text?.trim()
             if (!name) continue
 
-            // FILTRE STRICT : Uniquement les machines avec "OUI"
             const statusScan = sheet.getRow(2).getCell(c).text?.trim()
             if (statusScan !== "OUI") continue
 
@@ -49,7 +31,7 @@ export async function getMachines() {
                 model: sheet.getCell(5, c).text,
                 service_tag: sheet.getCell(9, c).text,
                 os: sheet.getCell(11, c).text,
-                ip: sheet.getCell(46, c).text, // Première IP trouvée
+                ip: sheet.getCell(46, c).text,
                 cpu: sheet.getCell(13, c).text,
                 ram: sheet.getCell(15, c).text,
                 gpu: sheet.getCell(16, c).text,
@@ -65,12 +47,10 @@ export async function getMachines() {
 }
 
 export async function triggerScan(action: 'Local' | 'AD' | 'IPRange' | 'Target', target?: string) {
-    // Audit Sécurité : Protection contre l'injection de commandes
     if (target && !/^[a-zA-Z0-9.-]+$/.test(target)) {
         throw new Error("Cible invalide : Caractères non autorisés détectés.")
     }
 
-    // Optimisation Vercel : Empêcher le scan si on est sur le Cloud
     if (process.env.VERCEL) {
         throw new Error("Le scan direct n'est pas possible depuis Vercel. Utilisez un agent local.")
     }
@@ -103,50 +83,15 @@ export async function triggerScan(action: 'Local' | 'AD' | 'IPRange' | 'Target',
 }
 
 export async function getImportInfo() {
-    const p = path.join(process.cwd(), "data", "import_info.json")
-    if (fs.existsSync(p)) {
-        try {
-            return JSON.parse(fs.readFileSync(p, "utf-8"))
-        } catch { return null }
-    }
-    return null
+    return _getImportInfo()
 }
 
 export async function deleteMachines(ids: number[]) {
-    const rootPath = path.join(process.cwd(), "data")
-    const filePath = path.join(rootPath, "Inventaire_Parc.xlsx")
-    const scriptPath = path.join(process.cwd(), "DeleteInExcel.ps1")
-
-    if (!fs.existsSync(filePath)) {
-        return { success: false, error: "Fichier inventaire non trouvé." }
+    try {
+        await deleteMachineColumns(ids)
+        return { success: true }
+    } catch (error: any) {
+        console.error("Error deleting machines:", error)
+        return { success: false, error: error.message || "Erreur lors de la suppression" }
     }
-
-    return new Promise((resolve) => {
-        const psArgs = [
-            "-NoProfile",
-            "-ExecutionPolicy", "Bypass",
-            "-File", scriptPath,
-            "-InventairePath", filePath,
-            "-Ids", ids.join(",")
-        ]
-
-        const ps = spawn("powershell.exe", psArgs)
-        let output = ""
-        let errorOutput = ""
-
-        ps.stdout.on("data", (data) => output += data.toString())
-        ps.stderr.on("data", (data) => errorOutput += data.toString())
-
-        ps.on("close", (code) => {
-            if (code === 0 && output.includes("SUCCESS")) {
-                resolve({ success: true })
-            } else {
-                let msg = errorOutput || output || "Erreur lors de l'exécution PowerShell"
-                if (msg.includes("EBUSY") || msg.includes("permission denied")) {
-                    msg = "Le fichier Excel est probablement ouvert. Fermez-le et réessayez."
-                }
-                resolve({ success: false, error: msg })
-            }
-        })
-    })
 }
