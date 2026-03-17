@@ -6,7 +6,7 @@ import fs from "fs"
 import { spawn } from "child_process"
 
 export async function getMachines() {
-    const filePath = path.join(process.cwd(), "..", "Inventaire_Parc.xlsx")
+    const filePath = path.join(process.cwd(), "data", "Inventaire_Parc.xlsx")
 
     if (!fs.existsSync(filePath)) return []
 
@@ -100,7 +100,7 @@ export async function triggerScan(action: 'Local' | 'AD' | 'IPRange' | 'Target',
 }
 
 export async function getImportInfo() {
-    const p = path.join(process.cwd(), "..", "import_info.json")
+    const p = path.join(process.cwd(), "data", "import_info.json")
     if (fs.existsSync(p)) {
         try {
             return JSON.parse(fs.readFileSync(p, "utf-8"))
@@ -110,7 +110,7 @@ export async function getImportInfo() {
 }
 
 export async function deleteMachines(ids: number[]) {
-    const rootPath = path.join(process.cwd(), "..")
+    const rootPath = path.join(process.cwd(), "data")
     const filePath = path.join(rootPath, "Inventaire_Parc.xlsx")
     const scriptPath = path.join(process.cwd(), "DeleteInExcel.ps1")
 

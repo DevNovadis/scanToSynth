@@ -18,7 +18,7 @@ export async function POST(req: NextRequest) {
 
         if (!NOM) return NextResponse.json({ error: "Nom de machine manquant" }, { status: 400 })
 
-        const rootPath = path.join(process.cwd(), "..")
+        const rootPath = path.join(process.cwd(), "data")
         const filePath = path.join(rootPath, "Inventaire_Parc.xlsx")
         const modelPath = path.join(rootPath, "Modèle_fiche_synthèse.xlsx")
 
