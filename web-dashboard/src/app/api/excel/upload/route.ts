@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { mergeMachines, saveImportInfo, deleteInventory, type MachineData } from "@/lib/excel-store"
+import { loadXlsxSafe } from "@/lib/xlsx-reader"
 
 export async function POST(req: NextRequest) {
     try {
@@ -8,16 +9,12 @@ export async function POST(req: NextRequest) {
         if (!file) return NextResponse.json({ error: "Aucun fichier fourni" }, { status: 400 })
 
         const arrayBuffer = await file.arrayBuffer()
-        const buffer = Buffer.from(arrayBuffer)
 
-        // Utiliser xlsx-populate au lieu d'ExcelJS pour la lecture
-        // (ExcelJS plante sur les fichiers avec des dimensions > 16384 colonnes, bug connu)
-        const XlsxPopulate = require("xlsx-populate")
-        const uploadedWorkbook = await XlsxPopulate.fromDataAsync(buffer)
-
-        // Trouver la bonne feuille
-        let uploadedSheet = uploadedWorkbook.sheet("Serveurs et postes clients")
-        if (!uploadedSheet) uploadedSheet = uploadedWorkbook.sheet(0)
+        // Charger le fichier avec correction des dimensions (contourne le bug ExcelJS 16385)
+        const uploadedWorkbook = await loadXlsxSafe(Buffer.from(arrayBuffer))
+        const uploadedSheet = uploadedWorkbook.getWorksheet("Serveurs et postes clients")
+            || uploadedWorkbook.worksheets.find(w => w.name?.includes("Serveurs"))
+            || uploadedWorkbook.worksheets[0]
 
         if (!uploadedSheet) {
             return NextResponse.json({ error: "Aucune feuille trouvée dans le fichier" }, { status: 400 })
@@ -27,18 +24,18 @@ export async function POST(req: NextRequest) {
         const machinesData: MachineData[] = []
 
         for (let c = 2; c <= 250; c++) {
-            const nameValue = uploadedSheet.cell(1, c).value()
-            if (!nameValue) continue
-            const name = String(nameValue).trim()
-            if (!name) continue
+            const nameValue = uploadedSheet.getCell(1, c).text
+            if (!nameValue || nameValue.trim() === "") continue
 
+            const machineName = nameValue.trim()
             const valeurs: (string | number | null)[] = []
+
             for (let r = 1; r <= 150; r++) {
-                const v = uploadedSheet.cell(r, c).value()
+                const v = uploadedSheet.getCell(r, c).value
                 valeurs.push(v !== undefined && v !== null ? v : null)
             }
 
-            machinesData.push({ NOM: name, VALEURS: valeurs })
+            machinesData.push({ NOM: machineName, VALEURS: valeurs })
         }
 
         if (machinesData.length === 0) {

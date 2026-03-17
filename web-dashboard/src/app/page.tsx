@@ -21,7 +21,10 @@ import {
   Settings,
   Upload,
   CheckCircle2,
-  Trash2
+  Trash2,
+  Terminal,
+  Copy,
+  Check
 } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import {
@@ -53,8 +56,18 @@ export default function HomePage() {
   const [importInfo, setImportInfo] = useState<{ filename: string, date: string } | null>(null)
   const [selectedIds, setSelectedIds] = useState<number[]>([])
   const [deleting, setDeleting] = useState(false)
+  const [showScanHelp, setShowScanHelp] = useState(false)
+  const [copied, setCopied] = useState(false)
 
   const fileInputRef = useRef<HTMLInputElement>(null)
+
+  const scanCommand = `powershell -ExecutionPolicy Bypass -Command "& { irm 'https://raw.githubusercontent.com/Gartalgart/scanToSynth/master/web-dashboard/scan-to-cloud.ps1' -OutFile $env:TEMP\\scan.ps1; & $env:TEMP\\scan.ps1 }"`
+
+  const handleCopy = () => {
+    navigator.clipboard.writeText(scanCommand)
+    setCopied(true)
+    setTimeout(() => setCopied(false), 2000)
+  }
 
   const loadData = async () => {
     setLoading(true)
@@ -208,62 +221,57 @@ export default function HomePage() {
             <p className="text-muted-foreground font-medium">Capturez les données de votre réseau en direct.</p>
           </div>
           <div className="flex flex-wrap gap-2">
-            <Button
-              variant="default"
-              size="lg"
-              className="rounded-xl shadow-lg shadow-primary/20"
-              onClick={() => handleScan('Local')}
-              disabled={scanning}
-            >
-              <Zap className={`mr-2 h-4 w-4 ${scanning ? 'animate-pulse' : ''}`} />
-              Scanner ce PC
-            </Button>
-
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button variant="outline" size="lg" className="rounded-xl" disabled={scanning}>
-                  <Globe className="mr-2 h-4 w-4" />
-                  Scan Réseau
+            <Dialog open={showScanHelp} onOpenChange={setShowScanHelp}>
+              <DialogTrigger asChild>
+                <Button
+                  variant="default"
+                  size="lg"
+                  className="rounded-xl shadow-lg shadow-primary/20"
+                >
+                  <Zap className="mr-2 h-4 w-4" />
+                  Scanner un PC
                 </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="rounded-xl w-56">
-                <DropdownMenuItem onClick={() => handleScan('AD')} className="py-3">
-                  <Zap className="mr-2 h-4 w-4 text-blue-500" />
-                  Active Directory (CLT/SRV)
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => handleScan('IPRange')} className="py-3">
-                  <Network className="mr-2 h-4 w-4 text-orange-500" />
-                  Plage IP (192.168.200.x)
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
+              </DialogTrigger>
+              <DialogContent className="sm:max-w-xl rounded-3xl">
+                <DialogHeader>
+                  <DialogTitle className="text-xl font-bold flex items-center gap-2">
+                    <Terminal className="h-5 w-5 text-primary" />
+                    Scanner une machine
+                  </DialogTitle>
+                  <DialogDescription>
+                    Exécutez cette commande PowerShell sur la machine à scanner :
+                  </DialogDescription>
+                </DialogHeader>
+                <div className="space-y-4 py-4">
+                  <div className="relative">
+                    <pre className="bg-muted p-4 rounded-xl text-xs font-mono overflow-x-auto whitespace-pre-wrap break-all">
+                      {scanCommand}
+                    </pre>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="absolute top-2 right-2 h-8 w-8 p-0"
+                      onClick={handleCopy}
+                    >
+                      {copied ? <Check className="h-4 w-4 text-green-500" /> : <Copy className="h-4 w-4" />}
+                    </Button>
+                  </div>
+                  <div className="space-y-2 text-sm text-muted-foreground">
+                    <p className="font-semibold text-foreground">Comment faire :</p>
+                    <ol className="list-decimal list-inside space-y-1">
+                      <li>Ouvrez <span className="font-mono text-primary">PowerShell</span> sur la machine cible</li>
+                      <li>Collez la commande ci-dessus</li>
+                      <li>Les données apparaîtront ici automatiquement</li>
+                    </ol>
+                  </div>
+                </div>
+              </DialogContent>
+            </Dialog>
 
             <Button variant="ghost" size="lg" onClick={loadData} className="rounded-xl">
               <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
             </Button>
           </div>
-        </div>
-
-        {/* Specific Target Scan */}
-        <div className="flex gap-2 max-w-xl">
-          <div className="relative flex-1">
-            <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
-            <Input
-              placeholder="Scanner une cible spécifique (Nom ou IP)..."
-              className="pl-9 rounded-xl"
-              value={target}
-              onChange={(e) => setTarget(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && handleScan('Target', target)}
-            />
-          </div>
-          <Button
-            variant="secondary"
-            className="rounded-xl px-6"
-            onClick={() => handleScan('Target', target)}
-            disabled={scanning || !target}
-          >
-            Lancer
-          </Button>
         </div>
       </div>
 
