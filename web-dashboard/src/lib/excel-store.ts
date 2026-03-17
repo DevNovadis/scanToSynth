@@ -57,10 +57,10 @@ function localImportInfoPath() {
     return path.join(process.cwd(), "data", "import_info.json")
 }
 
-// ---------- Row labels for column A (matching template) ----------
+// ---------- Row labels for column A (exact match from template) ----------
 const ROW_LABELS: Record<number, string> = {
     1: "NOM",
-    2: "STATUT SCAN",
+    2: "LOCALISATION",
     3: "GROUPE DE TRAVAIL OU DOMAINE",
     4: "FABRICANT DU SYSTÈME",
     5: "MODELE DU SYSTÈME",
@@ -76,6 +76,7 @@ const ROW_LABELS: Record<number, string> = {
     15: "MÉMOIRE PHYSIQUE (RAM)",
     16: "CARTE GRAPHIQUE N° 1",
     17: "CARTE GRAPHIQUE N° 2",
+    // 18: separator row (empty, with gray fill)
     19: "TAILLE DISQUE VIRTUEL 0",
     20: "RAID DISQUE VIRTUEL 0",
     21: "TAILLE DISQUE VIRTUEL 1",
@@ -94,72 +95,94 @@ const ROW_LABELS: Record<number, string> = {
     34: "REFERENCE DU DISQUE 11",
     35: "REFERENCE DU DISQUE 12",
     36: "REFERENCE DU DISQUE 13",
-    37: "MONITEUR 1 CONNECTIQUE",
-    38: "MONITEUR 2 CONNECTIQUE",
-    39: "EQUIPEMENT TIERS N°1",
-    40: "EQUIPEMENT TIERS N°2",
-    41: "EQUIPEMENT TIERS N°3",
-    43: "CARTE RESEAU N°1 NOM",
-    44: "CARTE RESEAU N°1 REFERENCE",
-    45: "CARTE RESEAU N°1 MAC",
-    46: "CARTE RESEAU N°1 IP",
-    47: "CARTE RESEAU N°1 MASQUE",
-    48: "CARTE RESEAU N°1 PASSERELLE",
-    49: "CARTE RESEAU N°2 NOM",
-    50: "CARTE RESEAU N°2 REFERENCE",
-    51: "CARTE RESEAU N°2 MAC",
-    52: "CARTE RESEAU N°2 IP",
-    53: "CARTE RESEAU N°2 MASQUE",
-    54: "CARTE RESEAU N°2 PASSERELLE",
-    55: "CARTE RESEAU N°3 NOM",
-    56: "CARTE RESEAU N°3 REFERENCE",
-    57: "CARTE RESEAU N°3 MAC",
-    58: "CARTE RESEAU N°3 IP",
-    59: "CARTE RESEAU N°3 MASQUE",
-    60: "CARTE RESEAU N°3 PASSERELLE",
-    61: "CARTE RESEAU N°4 NOM",
-    62: "CARTE RESEAU N°4 REFERENCE",
-    63: "CARTE RESEAU N°4 MAC",
-    64: "CARTE RESEAU N°4 IP",
-    65: "CARTE RESEAU N°4 MASQUE",
-    66: "CARTE RESEAU N°4 PASSERELLE",
+    37: "MONITEUR 1 - CONNECTIQUE",
+    38: "MONITEUR 2 - CONNECTIQUE",
+    39: "EQUIPEMENT TIERS N °1",
+    40: "EQUIPEMENT TIERS N °2",
+    41: "EQUIPEMENT TIERS N °3",
+    // 42: separator row (empty, with gray fill)
+    43: "CARTE RESEAU N° 1 - NOM DE LA CONNEXION",
+    44: "CARTE RESEAU N° 1 - REFERENCE",
+    45: "CARTE RESEAU N° 1 - ADRESSE MAC",
+    46: "CARTE RESEAU N° 1 - ADRESSE IP",
+    47: "CARTE RESEAU N° 1 - MASQUE DE SOUS-RESEAU",
+    48: "CARTE RESEAU N° 1 - PASSERELLE",
+    49: "CARTE RESEAU N° 2 - NOM DE LA CONNEXION",
+    50: "CARTE RESEAU N° 2 - REFERENCE",
+    51: "CARTE RESEAU N° 2 - ADRESSE MAC",
+    52: "CARTE RESEAU N° 2 - ADRESSE IP",
+    53: "CARTE RESEAU N° 2 - MASQUE DE SOUS-RESEAU",
+    54: "CARTE RESEAU N° 2 - PASSERELLE",
+    55: "CARTE RESEAU N° 3 - NOM DE LA CONNEXION",
+    56: "CARTE RESEAU N° 3 - REFERENCE",
+    57: "CARTE RESEAU N° 3 - ADRESSE MAC",
+    58: "CARTE RESEAU N° 3 - ADRESSE IP",
+    59: "CARTE RESEAU N° 3 - MASQUE DE SOUS-RESEAU",
+    60: "CARTE RESEAU N° 3 - PASSERELLE",
+    61: "CARTE RESEAU N° 4 - NOM DE LA CONNEXION",
+    62: "CARTE RESEAU N° 4 - REFERENCE",
+    63: "CARTE RESEAU N° 4 - ADRESSE MAC",
+    64: "CARTE RESEAU N° 4 - ADRESSE IP",
+    65: "CARTE RESEAU N° 4 - MASQUE DE SOUS-RESEAU",
+    66: "CARTE RESEAU N° 4 - PASSERELLE",
+}
+
+// Separator rows (empty but with gray fill)
+const SEPARATOR_ROWS = [18, 42]
+
+// Gray fill (theme:0 tint:-0.35 ≈ #A6A6A6)
+const GRAY_FILL: ExcelJS.FillPattern = {
+    type: "pattern",
+    pattern: "solid",
+    fgColor: { argb: "FFA6A6A6" },
+}
+const WHITE_BOLD_FONT: Partial<ExcelJS.Font> = {
+    bold: true,
+    color: { argb: "FFFFFFFF" },
+    size: 11,
+    name: "Calibri",
+}
+const BLACK_BOLD_FONT: Partial<ExcelJS.Font> = {
+    bold: true,
+    color: { argb: "FF000000" },
+    size: 11,
+    name: "Calibri",
+}
+const LEFT_ALIGN: Partial<ExcelJS.Alignment> = { horizontal: "left" }
+
+function applyTemplateFormatting(sheet: ExcelJS.Worksheet): void {
+    // Column widths
+    sheet.getColumn(1).width = 65.27
+
+    // Row 1 (NOM): no fill, black bold text
+    const cell1 = sheet.getCell(1, 1)
+    if (!cell1.value) cell1.value = ROW_LABELS[1]
+    cell1.font = BLACK_BOLD_FONT
+    cell1.alignment = LEFT_ALIGN
+
+    // Rows 2-66: gray fill, white bold text
+    for (let r = 2; r <= 66; r++) {
+        const cell = sheet.getCell(r, 1)
+        const label = ROW_LABELS[r]
+        if (label && !cell.value) {
+            cell.value = label
+        }
+        // Apply gray fill and white font to all rows 2-66 (including separators 18, 42)
+        cell.fill = GRAY_FILL
+        cell.font = WHITE_BOLD_FONT
+        cell.alignment = LEFT_ALIGN
+    }
+
+    // Set default width for data columns (B onward)
+    for (let c = 2; c <= 25; c++) {
+        sheet.getColumn(c).width = 84
+    }
 }
 
 function createFormattedWorkbook(): ExcelJS.Workbook {
     const workbook = new ExcelJS.Workbook()
     const sheet = workbook.addWorksheet("Serveurs et postes clients")
-
-    // Set column A width
-    sheet.getColumn(1).width = 35
-
-    // Header style for labels
-    const labelFill: ExcelJS.FillPattern = {
-        type: "pattern",
-        pattern: "solid",
-        fgColor: { argb: "FF4472C4" },
-    }
-    const labelFont: Partial<ExcelJS.Font> = {
-        bold: true,
-        color: { argb: "FFFFFFFF" },
-        size: 10,
-    }
-    const borderStyle: Partial<ExcelJS.Borders> = {
-        top: { style: "thin" },
-        left: { style: "thin" },
-        bottom: { style: "thin" },
-        right: { style: "thin" },
-    }
-
-    // Write labels in column A with formatting
-    for (const [rowStr, label] of Object.entries(ROW_LABELS)) {
-        const row = parseInt(rowStr)
-        const cell = sheet.getCell(row, 1)
-        cell.value = label
-        cell.fill = labelFill
-        cell.font = labelFont
-        cell.border = borderStyle
-    }
-
+    applyTemplateFormatting(sheet)
     return workbook
 }
 
@@ -202,34 +225,8 @@ export async function getWorkbookBuffer(): Promise<Buffer | null> {
     const sheet = findSheet(workbook)
     if (!sheet) return null
 
-    // Ensure labels in column A are present
-    const labelFill: ExcelJS.FillPattern = {
-        type: "pattern",
-        pattern: "solid",
-        fgColor: { argb: "FF4472C4" },
-    }
-    const labelFont: Partial<ExcelJS.Font> = {
-        bold: true,
-        color: { argb: "FFFFFFFF" },
-        size: 10,
-    }
-    const borderStyle: Partial<ExcelJS.Borders> = {
-        top: { style: "thin" },
-        left: { style: "thin" },
-        bottom: { style: "thin" },
-        right: { style: "thin" },
-    }
-    for (const [rowStr, label] of Object.entries(ROW_LABELS)) {
-        const row = parseInt(rowStr)
-        const cell = sheet.getCell(row, 1)
-        if (!cell.value) {
-            cell.value = label
-        }
-        cell.fill = labelFill
-        cell.font = labelFont
-        cell.border = borderStyle
-    }
-    sheet.getColumn(1).width = 35
+    // Ensure template formatting is applied
+    applyTemplateFormatting(sheet)
 
     return Buffer.from(await workbook.xlsx.writeBuffer())
 }
