@@ -100,6 +100,7 @@ export function findSheet(workbook: ExcelJS.Workbook): ExcelJS.Worksheet | undef
 
 // ---------- Merge machines (replaces MergeExcel.ps1) ----------
 export async function mergeMachines(machinesData: MachineData[]): Promise<void> {
+    console.log("[Merge] Getting workbook...")
     const workbook = await getWorkbook()
     let sheet = findSheet(workbook)
 
@@ -153,7 +154,9 @@ export async function mergeMachines(machinesData: MachineData[]): Promise<void> 
         }
     }
 
+    console.log("[Merge] Saving workbook...")
     await saveWorkbook(workbook)
+    console.log("[Merge] Done!")
 }
 
 // ---------- Delete machine columns (replaces DeleteInExcel.ps1) ----------
