@@ -11,17 +11,32 @@ export interface MachineData {
 // ---------- Helpers Vercel Blob (dynamic import to avoid errors in local dev) ----------
 async function blobPut(pathname: string, body: Buffer | Uint8Array): Promise<string> {
     const { put } = await import("@vercel/blob")
-    const result = await put(pathname, body, { access: "public", addRandomSuffix: false, allowOverwrite: true })
-    return result.url
+    // Essayer public d'abord, fallback sur private
+    try {
+        const result = await put(pathname, body, { access: "public", addRandomSuffix: false, allowOverwrite: true })
+        return result.url
+    } catch {
+        const result = await put(pathname, body, { access: "private", addRandomSuffix: false, allowOverwrite: true })
+        return result.url
+    }
 }
 
 async function blobGet(pathname: string): Promise<Buffer | null> {
-    const { list } = await import("@vercel/blob")
+    const { list, getDownloadUrl } = await import("@vercel/blob")
     const result = await list({ prefix: pathname, limit: 1 })
     const blob = result.blobs.find(b => b.pathname === pathname)
     if (!blob) return null
-    const res = await fetch(blob.url)
-    if (!res.ok) return null
+    // Essayer fetch direct (public), sinon getDownloadUrl (private)
+    let res = await fetch(blob.url)
+    if (!res.ok) {
+        try {
+            const signedUrl = await getDownloadUrl(blob.url)
+            res = await fetch(signedUrl)
+            if (!res.ok) return null
+        } catch {
+            return null
+        }
+    }
     return Buffer.from(await res.arrayBuffer())
 }
 
