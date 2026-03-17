@@ -78,7 +78,12 @@ export default function HomePage() {
       await loadData()
     } catch (error) {
       console.error(error)
-      alert("Erreur lors du scan.")
+      const msg = error instanceof Error ? error.message : String(error)
+      if (msg.includes("Vercel") || msg.includes("agent local")) {
+        alert("Le scan direct n'est pas disponible en mode cloud.\n\nUtilisez le script PowerShell en local pour scanner et envoyer les résultats vers ce dashboard.")
+      } else {
+        alert("Erreur lors du scan : " + msg)
+      }
     } finally {
       setScanning(false)
     }

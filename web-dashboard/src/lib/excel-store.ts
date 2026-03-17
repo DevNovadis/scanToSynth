@@ -55,19 +55,8 @@ export async function getWorkbook(): Promise<ExcelJS.Workbook> {
             await workbook.xlsx.load(buf)
             return workbook
         }
-        // No file in blob yet -> load template and wipe data columns
-        const templatePath = localTemplatePath()
-        if (fs.existsSync(templatePath)) {
-            await workbook.xlsx.readFile(templatePath)
-        }
-        const sheet = findSheet(workbook)
-        if (sheet) {
-            for (let c = 2; c <= 21; c++) {
-                for (let r = 1; r <= 150; r++) {
-                    sheet.getCell(r, c).value = null
-                }
-            }
-        }
+        // No file in blob yet -> create a clean workbook (no template to avoid ExcelJS column overflow)
+        workbook.addWorksheet("Serveurs et postes clients")
         return workbook
     }
 
@@ -151,17 +140,6 @@ export async function mergeMachines(machinesData: MachineData[]): Promise<void> 
         }
 
         if (targetCol === 0) targetCol = 2
-
-        // Copy formatting from column 2 if target > 2
-        if (targetCol > 2) {
-            for (let r = 1; r <= 150; r++) {
-                const sourceCell = sheet.getCell(r, 2)
-                const targetCell = sheet.getCell(r, targetCol)
-                if (sourceCell.style) {
-                    targetCell.style = JSON.parse(JSON.stringify(sourceCell.style))
-                }
-            }
-        }
 
         // Write values (150 rows)
         const valeurs = machine.VALEURS || []
