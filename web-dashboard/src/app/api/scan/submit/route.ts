@@ -6,10 +6,17 @@ import { spawn } from "child_process"
 export async function GET() { return NextResponse.json({ status: "OK" }) }
 
 export async function POST(req: NextRequest) {
+    const apiKey = req.headers.get("x-api-key")
+    if (apiKey !== process.env.SCAN_API_KEY) {
+        return NextResponse.json({ error: "Non autorisé" }, { status: 401 })
+    }
+
     let tempJsonPath = ""
     try {
         const data = await req.json()
         const { NOM } = data
+
+        if (!NOM) return NextResponse.json({ error: "Nom de machine manquant" }, { status: 400 })
 
         const rootPath = path.join(process.cwd(), "..")
         const filePath = path.join(rootPath, "Inventaire_Parc.xlsx")

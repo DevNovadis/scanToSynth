@@ -1,36 +1,50 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# 🚀 Novadis Scanner
 
-## Getting Started
+Novadis Scanner est un outil professionnel d'inventaire automatique pour parcs informatiques sous Windows. Il permet de scanner des machines locales ou distantes (IP, Active Directory) et de centraliser les données matérielles et logicielles dans un tableau de bord moderne et un fichier Excel synchronisé.
 
-First, run the development server:
+## ✨ Fonctionnalités
 
+- **Scan Multi-Protocoles** : Support de WinRM (WSMan) et WMI (DCOM) avec repli automatique pour une compatibilité maximale.
+- **Tableau de Bord Moderne** : Interface fluide développée avec Next.js 15, Tailwind CSS et Shadcn/UI.
+- **Centralisation Excel** : Synchronisation bidirectionnelle avec un fichier `Inventaire_Parc.xlsx`.
+- **Recherche Avancée** : Filtrez vos machines par Nom, OS, Tag ou adresse IP.
+- **Sécurisé** : Protection contre l'injection de commandes et authentification par clé API.
+
+## 🛠 Architecture
+
+Le projet est composé de deux parties :
+1. **Web Dashboard** (`/web-dashboard`) : L'interface de consultation et de gestion.
+2. **Scanner Agent** (`script_fiche_synthèse_poste_serveur.ps1`) : L'outil PowerShell qui exécute l'extraction des données.
+
+## 🚀 Installation & Utilisation
+
+### 1. Pré-requis
+- Node.js 20+
+- Windows avec PowerShell 5.1+ (pour l'agent de scan)
+
+### 2. Lancement du Dashboard
 ```bash
+cd web-dashboard
+npm install
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+### 3. Configuration de la machine cible
+Pour qu'une machine puisse être scannée à distance, exécutez ces commandes en tant qu'administrateur sur le poste cible :
+```powershell
+winrm quickconfig -quiet
+netsh advfirewall firewall set rule group="Infrastructure de gestion Windows (WMI-Entrée)" new enable=yes
+```
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## 🌐 Déploiement Vercel
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+Le projet est optimisé pour Vercel. Consultez le fichier `VERCEL.md` pour les instructions spécifiques au déploiement Cloud et à la configuration des variables d'environnement.
 
-## Learn More
+## 🔒 Sécurité et Audit
 
-To learn more about Next.js, take a look at the following resources:
+- Authentification via header `x-api-key`.
+- Validation stricte des entrées utilisateurs.
+- Mode hybride : exécution sécurisée des scripts système uniquement en environnement local protégé.
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+---
+© 2024 Novadis - Système d'inventaire automatisé.

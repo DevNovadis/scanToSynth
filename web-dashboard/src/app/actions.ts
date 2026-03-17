@@ -62,6 +62,16 @@ export async function getMachines() {
 }
 
 export async function triggerScan(action: 'Local' | 'AD' | 'IPRange' | 'Target', target?: string) {
+    // Audit Sécurité : Protection contre l'injection de commandes
+    if (target && !/^[a-zA-Z0-9.-]+$/.test(target)) {
+        throw new Error("Cible invalide : Caractères non autorisés détectés.")
+    }
+
+    // Optimisation Vercel : Empêcher le scan si on est sur le Cloud
+    if (process.env.VERCEL) {
+        throw new Error("Le scan direct n'est pas possible depuis Vercel. Utilisez un agent local.")
+    }
+
     const scriptPath = path.join(process.cwd(), "..", "script_fiche_synthèse_poste_serveur.ps1")
 
     return new Promise((resolve, reject) => {

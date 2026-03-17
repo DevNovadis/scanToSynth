@@ -1,4 +1,4 @@
-﻿<#
+<#
 .SYNOPSIS
     Script d'inventaire matériel et logiciel pour un poste local ou l'ensemble du réseau (postes CLT/SRV).
 .DESCRIPTION
@@ -18,19 +18,40 @@ param(
 Function Get-MachineInfo {
     param([string]$ComputerName = "localhost")
     try {
-        $cimParams = @{ ErrorAction = 'Stop'; ConnectionOptions = (New-CimSessionOption -Protocol Dcom) }
-        # Note: Dcom is often needed for older systems or specific firewall configs, but standard Cim (WSMan) is default.
-        # Removing explicit Dcom to let Cim decide, or keep it if previous tests showed it was necessary.
-        # Actually, let's use standard Cim and only fallback if needed.
-        $cimParams = @{ ErrorAction = 'Stop'; OperationTimeoutSec = 5 }
+        $cimParams = @{ ErrorAction = 'Stop'; OperationTimeoutSec = 8 }
         
         if ($ComputerName -ne "localhost" -and $ComputerName -ne $env:COMPUTERNAME) {
             $cimParams.ComputerName = $ComputerName
         }
 
-        $ComputerSystem = Get-CimInstance Win32_ComputerSystem @cimParams
-        $BIOS = Get-CimInstance Win32_BIOS @cimParams
-        $OS = Get-CimInstance Win32_OperatingSystem @cimParams
+        # Tentative 1 : CIM Standard (WSMan)
+        $session = $null
+        try {
+            Write-Host "Tentative CIM/WSMan sur $ComputerName..." -ForegroundColor Gray
+            $session = New-CimSession @cimParams
+        }
+        catch {
+            Write-Host "WSMan échoué : $($_.Exception.Message)" -ForegroundColor Yellow
+            # Tentative 2 : Fallback DCOM
+            Write-Host "WSMan échoué. Tentative DCOM sur $ComputerName..." -ForegroundColor Gray
+            $opt = New-CimSessionOption -Protocol Dcom
+            $cimParams.SessionOption = $opt
+            try {
+                $session = New-CimSession @cimParams
+            }
+            catch {
+                $errorMessage = $_.Exception.Message
+                # Si l'erreur est "Accès refusé", c'est un problème d'authentification
+                if ($errorMessage -like "*Accès refusé*" -or $errorMessage -like "*Access is denied*") {
+                    throw "Accès refusé à $ComputerName ($errorMessage). Vérifiez vos droits admin ou le LocalAccountTokenFilterPolicy."
+                }
+                throw "Impossible de se connecter à $ComputerName : $errorMessage"
+            }
+        }
+
+        $ComputerSystem = Get-CimInstance Win32_ComputerSystem -CimSession $session
+        $BIOS = Get-CimInstance Win32_BIOS -CimSession $session
+        $OS = Get-CimInstance Win32_OperatingSystem -CimSession $session
         
         $TimeConfigStr = "N/A"
         if ($ComputerName -eq "localhost" -or $ComputerName -eq $env:COMPUTERNAME) {
@@ -38,33 +59,33 @@ Function Get-MachineInfo {
             if ($TimeConfig.NtpServer) { $TimeConfigStr = $TimeConfig.NtpServer }
         }
         
-        $CPUs = Get-CimInstance Win32_Processor @cimParams
+        $CPUs = Get-CimInstance Win32_Processor -CimSession $session
         $CPU_Details = @()
         foreach ($cpu in $CPUs) {
-            $CPU_Details += "$($cpu.Name) (Cœurs: $($cpu.NumberOfCores))"
+            $CPU_Details += "$($cpu.Name) (Coeurs: $($cpu.NumberOfCores))"
         }
 
-        $GPUs = Get-CimInstance Win32_VideoController @cimParams
+        $GPUs = Get-CimInstance Win32_VideoController -CimSession $session
         $GPU_Details = @()
         foreach ($gpu in $GPUs) {
             $GPU_Details += $gpu.Name
         }
 
-        $Disks = Get-CimInstance Win32_DiskDrive @cimParams
+        $Disks = Get-CimInstance Win32_DiskDrive -CimSession $session
         $Disk_Refs = @()
         foreach ($disk in $Disks) {
             $SizeGB = [math]::Round($disk.Size / 1GB, 2)
             $Disk_Refs += "$($disk.Model) - $SizeGB Go - SN: $($disk.SerialNumber)"
         }
 
-        $LogicalDisks = Get-CimInstance Win32_LogicalDisk @cimParams | Where-Object { $_.DriveType -eq 3 }
+        $LogicalDisks = Get-CimInstance Win32_LogicalDisk -CimSession $session | Where-Object { $_.DriveType -eq 3 }
         $Vol_List = @()
         foreach ($vol in $LogicalDisks) {
             $SizeGB = [math]::Round($vol.Size / 1GB, 2)
             $Vol_List += "$($vol.DeviceID) ($SizeGB Go)"
         }
 
-        $NetAdapters = Get-CimInstance Win32_NetworkAdapterConfiguration @cimParams | Where-Object { $_.IPEnabled -eq $true }
+        $NetAdapters = Get-CimInstance Win32_NetworkAdapterConfiguration -CimSession $session | Where-Object { $_.IPEnabled -eq $true }
         $Net_Info = @()
         foreach ($nic in $NetAdapters) {
             $info = @{
