@@ -227,6 +227,9 @@ export async function getWorkbookBuffer(columnIds?: number[]): Promise<Buffer | 
     const sheet = findSheet(workbook)
     if (!sheet) return null
 
+    // Rows "NOM DE LA CONNEXION" to clear from data columns
+    const connectionNameRows = [43, 49, 55, 61]
+
     if (columnIds && columnIds.length > 0) {
         // Build a new workbook with only selected columns
         const filtered = createFormattedWorkbook()
@@ -235,6 +238,7 @@ export async function getWorkbookBuffer(columnIds?: number[]): Promise<Buffer | 
         let destCol = 2
         for (const srcCol of columnIds) {
             for (let r = 1; r <= 150; r++) {
+                if (connectionNameRows.includes(r)) continue // skip "NOM DE LA CONNEXION"
                 const val = sheet.getCell(r, srcCol).value
                 if (val !== null && val !== undefined) {
                     newSheet.getCell(r, destCol).value = val
@@ -247,7 +251,14 @@ export async function getWorkbookBuffer(columnIds?: number[]): Promise<Buffer | 
         return Buffer.from(await filtered.xlsx.writeBuffer())
     }
 
-    // No filter — export all
+    // No filter — export all: clear "NOM DE LA CONNEXION" rows for all data columns
+    for (let c = 2; c <= 250; c++) {
+        const name = sheet.getCell(1, c).text?.trim()
+        if (!name) continue
+        for (const r of connectionNameRows) {
+            sheet.getCell(r, c).value = null
+        }
+    }
     applyTemplateFormatting(sheet)
     return Buffer.from(await workbook.xlsx.writeBuffer())
 }
