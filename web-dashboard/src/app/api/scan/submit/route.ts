@@ -1,5 +1,8 @@
 import { NextRequest, NextResponse } from "next/server"
 import { mergeMachines } from "@/lib/excel-store"
+import { revalidatePath } from "next/cache"
+
+export const dynamic = "force-dynamic"
 
 export async function GET() { return NextResponse.json({ status: "OK" }) }
 
@@ -45,6 +48,10 @@ export async function POST(req: NextRequest) {
         }
 
         await mergeMachines([{ NOM, VALEURS: valeurs }])
+
+        // Invalidate the Next.js cache so the dashboard shows the new machine immediately
+        revalidatePath("/")
+        revalidatePath("/inventory")
 
         return NextResponse.json({ success: true, machine: NOM })
     } catch (e: any) {

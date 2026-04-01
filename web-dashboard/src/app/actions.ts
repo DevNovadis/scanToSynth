@@ -1,11 +1,12 @@
 "use server"
 
 import { getWorkbook, findSheet, deleteMachineColumns, getImportInfo as _getImportInfo } from "@/lib/excel-store"
-import { revalidatePath } from "next/cache"
+import { revalidatePath, unstable_noStore as noStore } from "next/cache"
 import path from "path"
 import { spawn } from "child_process"
 
 export async function getMachines() {
+    noStore() // Force fresh data on every call — no Next.js caching
     try {
         const workbook = await getWorkbook()
         const sheet = findSheet(workbook)
