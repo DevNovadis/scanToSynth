@@ -20,9 +20,7 @@ export async function getMachines() {
             const name = sheet.getRow(1).getCell(c).text?.trim()
             if (!name) continue
 
-            const statusScan = sheet.getRow(2).getCell(c).text?.trim()
-            console.log(`[getMachines] Col ${c}: name="${name}", status="${statusScan}"`)
-            if (statusScan !== "OUI") continue
+            console.log(`[getMachines] Col ${c}: name="${name}"`)
 
             const disks = []
             for (let r = 23; r <= 36; r++) {

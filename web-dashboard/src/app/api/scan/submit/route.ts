@@ -23,7 +23,6 @@ export async function POST(req: NextRequest) {
         }
 
         valeurs[0] = NOM
-        valeurs[1] = "OUI"
         w(3, data.GROUPE_DOMAINE); w(4, data.FABRICANT); w(5, data.MODELE)
         w(8, data.SERVEUR_NTP); w(9, data.SERVICE_TAG)
         w(11, data.OS); w(12, data.TYPE_SYSTEM)

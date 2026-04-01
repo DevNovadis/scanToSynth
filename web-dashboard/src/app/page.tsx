@@ -305,7 +305,7 @@ export default function HomePage() {
               disabled={downloading || machines.length === 0}
             >
               <Download className="h-5 w-5" />
-              {downloading ? "Export..." : "Exporter (.xlsx)"}
+              {downloading ? "Export..." : selectedIds.length > 0 ? `Exporter (${selectedIds.length} sélectionnées)` : "Exporter tout (.xlsx)"}
             </Button>
           </div>
         </div>
