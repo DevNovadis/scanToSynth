@@ -40,7 +40,7 @@ export async function POST(req: NextRequest) {
             data.RESEAU.forEach((nic: any, i: number) => {
                 if (i < 4) {
                     const r = 43 + (i * 6)
-                    w(r, nic.Nom); w(r + 2, nic.MAC); w(r + 3, nic.IP); w(r + 4, nic.Masque); w(r + 5, nic.Passerelle)
+                    w(r, nic.Nom); w(r + 1, nic.Nom); w(r + 2, nic.MAC); w(r + 3, nic.IP); w(r + 4, nic.Masque); w(r + 5, nic.Passerelle)
                 }
             })
         }

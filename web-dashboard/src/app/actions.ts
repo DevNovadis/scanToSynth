@@ -1,6 +1,7 @@
 "use server"
 
 import { getWorkbook, findSheet, deleteMachineColumns, getImportInfo as _getImportInfo } from "@/lib/excel-store"
+import { revalidatePath } from "next/cache"
 import path from "path"
 import { spawn } from "child_process"
 
@@ -94,6 +95,7 @@ export async function getImportInfo() {
 export async function deleteMachines(ids: number[]) {
     try {
         await deleteMachineColumns(ids)
+        revalidatePath("/")
         return { success: true }
     } catch (error: any) {
         console.error("Error deleting machines:", error)

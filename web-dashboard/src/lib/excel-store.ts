@@ -27,11 +27,12 @@ async function blobGet(pathname: string): Promise<Buffer | null> {
     const blob = result.blobs.find(b => b.pathname === pathname)
     if (!blob) return null
     // Essayer fetch direct (public), sinon getDownloadUrl (private)
-    let res = await fetch(blob.url)
+    // cache: 'no-store' pour éviter que Next.js serve une version périmée
+    let res = await fetch(blob.url, { cache: 'no-store' })
     if (!res.ok) {
         try {
             const signedUrl = await getDownloadUrl(blob.url)
-            res = await fetch(signedUrl)
+            res = await fetch(signedUrl, { cache: 'no-store' })
             if (!res.ok) return null
         } catch {
             return null

@@ -127,16 +127,18 @@ export default function HomePage() {
     if (e) e.stopPropagation()
     if (!confirm(`Supprimer la machine "${name}" ?`)) return
     setDeleting(true)
+    // Mise à jour optimiste immédiate
+    setMachines(prev => prev.filter(m => m.id !== id))
+    setSelectedIds(prev => prev.filter(i => i !== id))
     try {
       const res = await deleteMachines([id]) as { success: boolean, error?: string }
-      if (res.success) {
-        setSelectedIds(prev => prev.filter(i => i !== id))
-        await loadData()
-      } else {
+      if (!res.success) {
         alert("Erreur : " + (res.error || "Échec"))
+        await loadData() // Restaurer l'état réel en cas d'erreur
       }
     } catch (error) {
       alert("Erreur : " + (error instanceof Error ? error.message : String(error)))
+      await loadData()
     } finally {
       setDeleting(false)
     }
@@ -167,18 +169,21 @@ export default function HomePage() {
     if (selectedIds.length === 0) return
     if (!confirm(`Voulez-vous vraiment supprimer les ${selectedIds.length} machines sélectionnées ?`)) return
 
+    const idsToDelete = [...selectedIds]
     setDeleting(true)
+    // Mise à jour optimiste immédiate
+    setMachines(prev => prev.filter(m => !idsToDelete.includes(m.id)))
+    setSelectedIds([])
     try {
-      const res = await deleteMachines(selectedIds) as { success: boolean, error?: string }
-      if (res.success) {
-        setSelectedIds([])
-        await loadData()
-      } else {
+      const res = await deleteMachines(idsToDelete) as { success: boolean, error?: string }
+      if (!res.success) {
         alert("Erreur lors de la suppression : " + (res.error || "Réponse invalide"))
+        await loadData()
       }
     } catch (error) {
       console.error(error)
       alert("Erreur lors de la suppression : " + (error instanceof Error ? error.message : String(error)))
+      await loadData()
     } finally {
       setDeleting(false)
     }
