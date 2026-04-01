@@ -97,7 +97,14 @@ export default function HomePage() {
   const handleDownload = async () => {
     setDownloading(true)
     try {
-      const response = await fetch('/api/excel/generate')
+      const idsToExport = selectedIds.length > 0 ? selectedIds : undefined
+      const response = idsToExport
+        ? await fetch('/api/excel/generate', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ columnIds: idsToExport }),
+          })
+        : await fetch('/api/excel/generate')
       if (!response.ok) throw new Error('Échec de la génération')
 
       const blob = await response.blob()

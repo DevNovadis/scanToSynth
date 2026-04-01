@@ -220,14 +220,34 @@ export async function saveWorkbook(workbook: ExcelJS.Workbook): Promise<void> {
 }
 
 // ---------- Get workbook as buffer (for download, with labels ensured) ----------
-export async function getWorkbookBuffer(): Promise<Buffer | null> {
+// If columnIds is provided and non-empty, only include those columns
+export async function getWorkbookBuffer(columnIds?: number[]): Promise<Buffer | null> {
     const workbook = await getWorkbook()
     const sheet = findSheet(workbook)
     if (!sheet) return null
 
-    // Ensure template formatting is applied
-    applyTemplateFormatting(sheet)
+    if (columnIds && columnIds.length > 0) {
+        // Build a new workbook with only selected columns
+        const filtered = createFormattedWorkbook()
+        const newSheet = filtered.worksheets[0]
 
+        let destCol = 2
+        for (const srcCol of columnIds) {
+            for (let r = 1; r <= 150; r++) {
+                const val = sheet.getCell(r, srcCol).value
+                if (val !== null && val !== undefined) {
+                    newSheet.getCell(r, destCol).value = val
+                }
+            }
+            newSheet.getColumn(destCol).width = 84
+            destCol++
+        }
+
+        return Buffer.from(await filtered.xlsx.writeBuffer())
+    }
+
+    // No filter — export all
+    applyTemplateFormatting(sheet)
     return Buffer.from(await workbook.xlsx.writeBuffer())
 }
 

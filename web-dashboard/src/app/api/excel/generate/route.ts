@@ -1,9 +1,19 @@
-import { NextResponse } from "next/server"
+import { NextRequest, NextResponse } from "next/server"
 import { getWorkbookBuffer } from "@/lib/excel-store"
 
 export async function GET() {
+    return handleExport()
+}
+
+export async function POST(request: NextRequest) {
+    const body = await request.json().catch(() => ({}))
+    const columnIds: number[] | undefined = body.columnIds
+    return handleExport(columnIds)
+}
+
+async function handleExport(columnIds?: number[]) {
     try {
-        const buffer = await getWorkbookBuffer()
+        const buffer = await getWorkbookBuffer(columnIds)
 
         if (!buffer) {
             return NextResponse.json({ error: "Fichier inventaire non trouvé. Lancez un scan d'abord." }, { status: 404 })
