@@ -1,6 +1,6 @@
 "use server"
 
-import { getWorkbook, findSheet, deleteMachineColumns, getImportInfo as _getImportInfo } from "@/lib/excel-store"
+import { getWorkbook, findSheet, deleteMachineColumns } from "@/lib/excel-store"
 import { revalidatePath, unstable_noStore as noStore } from "next/cache"
 import path from "path"
 import { spawn } from "child_process"
@@ -75,6 +75,10 @@ export async function triggerScan(action: 'Local' | 'AD' | 'IPRange' | 'Target',
             args.push("-Target", target)
         }
 
+        if (process.env.SCAN_API_KEY) {
+            args.push("-ApiKey", process.env.SCAN_API_KEY)
+        }
+
         const ps = spawn("powershell.exe", args)
 
         ps.stdout.on("data", (data: any) => console.log(`PS: ${data}`))
@@ -87,10 +91,6 @@ export async function triggerScan(action: 'Local' | 'AD' | 'IPRange' | 'Target',
     })
 }
 
-export async function getImportInfo() {
-    return _getImportInfo()
-}
-
 export async function deleteMachines(ids: number[]) {
     try {
         await deleteMachineColumns(ids)
@@ -100,4 +100,15 @@ export async function deleteMachines(ids: number[]) {
         console.error("Error deleting machines:", error)
         return { success: false, error: error.message || "Erreur lors de la suppression" }
     }
+}
+
+// Commande d'installation de l'agent, avec la clé API injectée côté serveur.
+// Accessible uniquement derrière l'authentification du dashboard (voir src/proxy.ts).
+export async function getAgentConfig() {
+    const apiKey = process.env.SCAN_API_KEY || ""
+    const appUrl = process.env.NEXT_PUBLIC_APP_URL || "https://scan-to-synth.vercel.app"
+    const apiUrl = `${appUrl.replace(/\/$/, "")}/api/scan/submit`
+    const scriptUrl = "https://raw.githubusercontent.com/DevNovadis/scanToSynth/master/web-dashboard/scan-to-cloud.ps1"
+    const scanCommand = `powershell -ExecutionPolicy Bypass -Command "& { irm '${scriptUrl}' -OutFile $env:TEMP\\scan.ps1; & $env:TEMP\\scan.ps1 -ApiUrl '${apiUrl}' -ApiKey '${apiKey}' }"`
+    return { apiKey, apiUrl, scanCommand }
 }

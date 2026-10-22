@@ -7,8 +7,12 @@ export const dynamic = "force-dynamic"
 export async function GET() { return NextResponse.json({ status: "OK" }) }
 
 export async function POST(req: NextRequest) {
+    const expectedKey = process.env.SCAN_API_KEY
+    if (!expectedKey) {
+        return NextResponse.json({ error: "SCAN_API_KEY non configurée sur le serveur" }, { status: 503 })
+    }
     const apiKey = req.headers.get("x-api-key")
-    if (apiKey !== process.env.SCAN_API_KEY) {
+    if (apiKey !== expectedKey) {
         return NextResponse.json({ error: "Non autorisé" }, { status: 401 })
     }
 

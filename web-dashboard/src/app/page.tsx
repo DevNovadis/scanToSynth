@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { getMachines, triggerScan, deleteMachines } from "@/app/actions"
+import { getMachines, triggerScan, deleteMachines, getAgentConfig } from "@/app/actions"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -54,7 +54,7 @@ export default function HomePage() {
   const [showScanHelp, setShowScanHelp] = useState(false)
   const [copied, setCopied] = useState(false)
 
-  const scanCommand = `powershell -ExecutionPolicy Bypass -Command "& { irm 'https://raw.githubusercontent.com/Gartalgart/scanToSynth/master/web-dashboard/scan-to-cloud.ps1' -OutFile $env:TEMP\\scan.ps1; & $env:TEMP\\scan.ps1 }"`
+  const [scanCommand, setScanCommand] = useState("")
 
   const handleCopy = () => {
     navigator.clipboard.writeText(scanCommand)
@@ -74,6 +74,7 @@ export default function HomePage() {
 
   useEffect(() => {
     loadData()
+    getAgentConfig().then(c => setScanCommand(c.scanCommand)).catch(() => {})
   }, [])
 
   const handleScan = async (action: 'Local' | 'AD' | 'IPRange' | 'Target', val?: string) => {

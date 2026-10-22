@@ -39,3 +39,7 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# inventaire réel (données sensibles : IP, MAC, n° de série)
+/data/Inventaire_Parc.xlsx
+/data/import_info.json

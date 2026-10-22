@@ -6,13 +6,22 @@
     Scanne le hardware local et envoie les données vers l'API cloud.
 .USAGE
     .\scan-to-cloud.ps1
-    .\scan-to-cloud.ps1 -ApiUrl "https://votre-site.vercel.app/api/scan/submit"
+    .\scan-to-cloud.ps1 -ApiUrl "https://votre-site.vercel.app/api/scan/submit" -ApiKey "<cle>"
+    La clé peut aussi venir de la variable d'environnement NOVADIS_SCAN_API_KEY.
 #>
 
 param(
     [string]$ApiUrl = "https://scan-to-synth.vercel.app/api/scan/submit",
-    [string]$ApiKey = "***CLE-REVOQUEE***"
+    [string]$ApiKey = $env:NOVADIS_SCAN_API_KEY
 )
+
+if (-not $ApiKey) {
+    $ApiKey = Read-Host "Cle API de l'agent (visible dans le dashboard, page 'Cle API')"
+}
+if (-not $ApiKey) {
+    Write-Host "ERREUR : aucune cle API fournie." -ForegroundColor Red
+    exit 1
+}
 
 Write-Host "============================================" -ForegroundColor Cyan
 Write-Host "  Novadis SCANNER - Scan vers Cloud" -ForegroundColor Cyan

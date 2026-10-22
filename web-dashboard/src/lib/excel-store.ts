@@ -1,6 +1,7 @@
 import ExcelJS from "exceljs"
 import path from "path"
 import fs from "fs"
+import { loadXlsxSafe } from "./xlsx-reader"
 
 // ---------- Types ----------
 export interface MachineData {
@@ -9,43 +10,31 @@ export interface MachineData {
 }
 
 // ---------- Helpers Vercel Blob (dynamic import to avoid errors in local dev) ----------
+// L'inventaire contient des données sensibles (IP, MAC, n° de série) : on écrit en privé.
+// Le repli public ne sert qu'aux anciens stores configurés en public — à migrer vers un store privé.
 async function blobPut(pathname: string, body: Buffer | Uint8Array): Promise<string> {
     const { put } = await import("@vercel/blob")
-    // Essayer public d'abord, fallback sur private
     try {
-        const result = await put(pathname, body, { access: "public", addRandomSuffix: false, allowOverwrite: true })
-        return result.url
-    } catch {
         const result = await put(pathname, body, { access: "private", addRandomSuffix: false, allowOverwrite: true })
+        return result.url
+    } catch (e: any) {
+        console.warn(`[Blob] Écriture privée impossible (${e?.message}). Store public ? Les données seront accessibles par URL.`)
+        const result = await put(pathname, body, { access: "public", addRandomSuffix: false, allowOverwrite: true })
         return result.url
     }
 }
 
 async function blobGet(pathname: string): Promise<Buffer | null> {
-    const { list, getDownloadUrl } = await import("@vercel/blob")
-    const result = await list({ prefix: pathname, limit: 1 })
-    const blob = result.blobs.find(b => b.pathname === pathname)
-    if (!blob) return null
-    // Essayer fetch direct (public), sinon getDownloadUrl (private)
-    // cache: 'no-store' pour éviter que Next.js serve une version périmée
-    let res = await fetch(blob.url, { cache: 'no-store' })
-    if (!res.ok) {
-        try {
-            const signedUrl = await getDownloadUrl(blob.url)
-            res = await fetch(signedUrl, { cache: 'no-store' })
-            if (!res.ok) return null
-        } catch {
-            return null
-        }
+    const { get } = await import("@vercel/blob")
+    let result = null
+    try {
+        // useCache: false pour toujours lire la dernière version écrite
+        result = await get(pathname, { access: "private", useCache: false })
+    } catch {
+        result = await get(pathname, { access: "public" }).catch(() => null)
     }
-    return Buffer.from(await res.arrayBuffer())
-}
-
-async function blobDel(pathname: string): Promise<void> {
-    const { list, del } = await import("@vercel/blob")
-    const result = await list({ prefix: pathname, limit: 1 })
-    const blob = result.blobs.find(b => b.pathname === pathname)
-    if (blob) await del(blob.url)
+    if (!result || !result.stream) return null
+    return Buffer.from(await new Response(result.stream).arrayBuffer())
 }
 
 const isVercel = !!process.env.VERCEL
@@ -53,9 +42,6 @@ const isVercel = !!process.env.VERCEL
 // ---------- Paths (local dev) ----------
 function localInventairePath() {
     return path.join(process.cwd(), "data", "Inventaire_Parc.xlsx")
-}
-function localImportInfoPath() {
-    return path.join(process.cwd(), "data", "import_info.json")
 }
 
 // ---------- Row labels for column A (exact match from template) ----------
@@ -128,6 +114,13 @@ const ROW_LABELS: Record<number, string> = {
     66: "CARTE RESEAU N° 4 - PASSERELLE",
 }
 
+// Rows filled by the scan agent (see /api/scan/submit). All other rows are manual input.
+export const SCANNED_ROWS: number[] = [
+    1, 3, 4, 5, 8, 9, 11, 12, 13, 14, 15, 16, 17, 19, 21,
+    ...Array.from({ length: 14 }, (_, i) => 23 + i), // disques 00-13
+    ...Array.from({ length: 24 }, (_, i) => 43 + i), // cartes réseau 1-4
+]
+
 // Separator rows (empty but with gray fill)
 const SEPARATOR_ROWS = [18, 42]
 
@@ -191,22 +184,19 @@ function createFormattedWorkbook(): ExcelJS.Workbook {
 export async function getWorkbook(): Promise<ExcelJS.Workbook> {
     if (isVercel) {
         const buf = await blobGet("Inventaire_Parc.xlsx")
-        if (buf) {
-            const workbook = new ExcelJS.Workbook()
-            await workbook.xlsx.load(buf)
-            return workbook
-        }
+        if (buf) return loadXlsxSafe(buf)
         // No file in blob yet -> create formatted workbook with labels
         return createFormattedWorkbook()
     }
 
     // Local dev
-    const workbook = new ExcelJS.Workbook()
+    // loadXlsxSafe : les fichiers écrits par Excel COM (script PowerShell) ont des
+    // dimensions > 16384 colonnes que ExcelJS refuse
     const filePath = localInventairePath()
     if (fs.existsSync(filePath) && fs.statSync(filePath).size > 0) {
-        await workbook.xlsx.readFile(filePath)
+        return loadXlsxSafe(fs.readFileSync(filePath))
     }
-    return workbook
+    return new ExcelJS.Workbook()
 }
 
 // ---------- Save the workbook ----------
@@ -315,15 +305,14 @@ export async function mergeMachines(machinesData: MachineData[]): Promise<void> 
 
         if (targetCol === 0) targetCol = 2
 
-        // Write values (150 rows)
+        // N'écrire que les lignes gérées par le scan : les champs saisis à la main
+        // (localisation, fonctions, garantie, RAID, moniteurs...) sont conservés.
+        // Une ligne scannée vide est effacée (ex : disque ou carte réseau retiré).
         const valeurs = machine.VALEURS || []
-        for (let r = 0; r < 150; r++) {
-            const val = r < valeurs.length ? valeurs[r] : null
-            if (val !== null && val !== undefined && val.toString().trim() !== "") {
-                sheet.getCell(r + 1, targetCol).value = val
-            } else {
-                sheet.getCell(r + 1, targetCol).value = null
-            }
+        for (const row of SCANNED_ROWS) {
+            const val = valeurs[row - 1]
+            const empty = val === null || val === undefined || val.toString().trim() === ""
+            sheet.getCell(row, targetCol).value = empty ? null : val
         }
     }
 
@@ -345,37 +334,4 @@ export async function deleteMachineColumns(columnIds: number[]): Promise<void> {
     }
 
     await saveWorkbook(workbook)
-}
-
-// ---------- Import info (small JSON metadata) ----------
-export async function getImportInfo(): Promise<any | null> {
-    if (isVercel) {
-        const buf = await blobGet("import_info.json")
-        if (!buf) return null
-        try { return JSON.parse(buf.toString("utf-8")) } catch { return null }
-    }
-    const p = localImportInfoPath()
-    if (!fs.existsSync(p)) return null
-    try { return JSON.parse(fs.readFileSync(p, "utf-8")) } catch { return null }
-}
-
-export async function saveImportInfo(info: { filename: string; date: string }): Promise<void> {
-    const json = JSON.stringify(info)
-    if (isVercel) {
-        await blobPut("import_info.json", Buffer.from(json, "utf-8"))
-    } else {
-        fs.writeFileSync(localImportInfoPath(), json)
-    }
-}
-
-export async function deleteInventory(): Promise<void> {
-    if (isVercel) {
-        await blobDel("Inventaire_Parc.xlsx")
-        await blobDel("import_info.json")
-    } else {
-        const filePath = localInventairePath()
-        const infoPath = localImportInfoPath()
-        if (fs.existsSync(filePath)) fs.unlinkSync(filePath)
-        if (fs.existsSync(infoPath)) fs.unlinkSync(infoPath)
-    }
 }

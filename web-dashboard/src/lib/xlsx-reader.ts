@@ -38,6 +38,19 @@ export async function loadXlsxSafe(buffer: Buffer | ArrayBuffer): Promise<ExcelJ
             return match
         })
 
+        // Excel COM écrit aussi des styles de colonnes jusqu'à XFD : <col min="7" max="16384" .../>
+        // ExcelJS lit sans erreur mais échoue à la réécriture (colonne 16385) -> on borne à 250
+        xml = xml.replace(/<col ([^>]*?)\/>/g, (match, attrs) => {
+            const min = Number(/min="(\d+)"/.exec(attrs)?.[1])
+            const max = Number(/max="(\d+)"/.exec(attrs)?.[1])
+            if (!(max > 250)) return match
+            if (min > 250) return ""
+            return `<col ${attrs.replace(/max="\d+"/, 'max="250"')}/>`
+        })
+
+        // Validations de données (listes déroulantes NTP / RAID) définies jusqu'à XFD : sqref="B8:XFD8"
+        xml = xml.replace(/sqref="([^"]*)"/g, (_match, ref) => `sqref="${ref.replace(/:XFD(\d+)/g, ":IP$1")}"`)
+
         zip.file(sheetFile, xml)
     }
 

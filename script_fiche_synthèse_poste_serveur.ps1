@@ -7,9 +7,9 @@
 #>
 
 param(
-    [string]$OutputFile = "$PSScriptRoot\Inventaire_Parc.xlsx",
+    [string]$OutputFile = "$PSScriptRoot\web-dashboard\data\Inventaire_Parc.xlsx",
     [string]$ApiUrl = "http://127.0.0.1:3000/api/scan/submit",
-    [string]$ApiKey = "***CLE-REVOQUEE***",
+    [string]$ApiKey = $env:NOVADIS_SCAN_API_KEY,
     [switch]$SilentMode,
     [string]$Action, # Local, AD, IPRange, Target
     [string]$Target  # Nom ou IP pour l'action Target
@@ -209,13 +209,8 @@ Function Write-ToExcel {
 
         Write-Host "Écriture pour $machineName dans la colonne $targetCol" -ForegroundColor Green
         
-        # S'assurer que le label du status est présent en colonne A
-        if ($sheet.Cells.Item(2, 1).Text -eq "") {
-            $sheet.Cells.Item(2, 1).Value2 = "Status Scan"
-        }
-
+        # Ligne 2 = LOCALISATION (saisie manuelle) : ne pas l'écraser
         $sheet.Cells.Item(1, $targetCol).Value2 = $MachineInfo.NOM
-        $sheet.Cells.Item(2, $targetCol).Value2 = "OUI"
         $sheet.Cells.Item(3, $targetCol).Value2 = $MachineInfo.GROUPE_DOMAINE
         $sheet.Cells.Item(4, $targetCol).Value2 = $MachineInfo.FABRICANT
         $sheet.Cells.Item(5, $targetCol).Value2 = $MachineInfo.MODELE
