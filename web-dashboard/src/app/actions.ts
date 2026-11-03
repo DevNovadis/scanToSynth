@@ -1,12 +1,15 @@
 "use server"
 
 import { getWorkbook, findSheet, deleteMachineColumns } from "@/lib/excel-store"
+import { requireAuth } from "@/lib/auth"
+import { isValidColumnIds } from "@/lib/validation"
 import { revalidatePath, unstable_noStore as noStore } from "next/cache"
 import path from "path"
 import { spawn } from "child_process"
 
 export async function getMachines() {
     noStore() // Force fresh data on every call — no Next.js caching
+    await requireAuth()
     try {
         const workbook = await getWorkbook()
         const sheet = findSheet(workbook)
@@ -51,7 +54,17 @@ export async function getMachines() {
     }
 }
 
-export async function triggerScan(action: 'Local' | 'AD' | 'IPRange' | 'Target', target?: string) {
+const SCAN_ACTIONS = ["Local", "AD", "IPRange", "Target"] as const
+
+export async function triggerScan(action: typeof SCAN_ACTIONS[number], target?: string) {
+    await requireAuth()
+
+    if (!SCAN_ACTIONS.includes(action)) {
+        throw new Error("Action de scan invalide.")
+    }
+    if (target !== undefined && (typeof target !== "string" || target.length > 253)) {
+        throw new Error("Cible invalide.")
+    }
     if (target && !/^[a-zA-Z0-9.-]+$/.test(target)) {
         throw new Error("Cible invalide : Caractères non autorisés détectés.")
     }
@@ -75,11 +88,12 @@ export async function triggerScan(action: 'Local' | 'AD' | 'IPRange' | 'Target',
             args.push("-Target", target)
         }
 
-        if (process.env.SCAN_API_KEY) {
-            args.push("-ApiKey", process.env.SCAN_API_KEY)
-        }
+        // La clé passe par l'environnement (lu par le script via $env:NOVADIS_SCAN_API_KEY)
+        // pour ne pas apparaître dans la ligne de commande du processus
+        const env = { ...process.env }
+        if (process.env.SCAN_API_KEY) env.NOVADIS_SCAN_API_KEY = process.env.SCAN_API_KEY
 
-        const ps = spawn("powershell.exe", args)
+        const ps = spawn("powershell.exe", args, { env })
 
         ps.stdout.on("data", (data: any) => console.log(`PS: ${data}`))
         ps.stderr.on("data", (data: any) => console.error(`PS Error: ${data}`))
@@ -92,19 +106,26 @@ export async function triggerScan(action: 'Local' | 'AD' | 'IPRange' | 'Target',
 }
 
 export async function deleteMachines(ids: number[]) {
+    await requireAuth()
+
+    if (!isValidColumnIds(ids)) {
+        return { success: false, error: "Sélection invalide" }
+    }
+
     try {
         await deleteMachineColumns(ids)
         revalidatePath("/")
         return { success: true }
     } catch (error: any) {
         console.error("Error deleting machines:", error)
-        return { success: false, error: error.message || "Erreur lors de la suppression" }
+        return { success: false, error: "Erreur lors de la suppression" }
     }
 }
 
 // Commande d'installation de l'agent, avec la clé API injectée côté serveur.
 // Accessible uniquement derrière l'authentification du dashboard (voir src/proxy.ts).
 export async function getAgentConfig() {
+    await requireAuth()
     const apiKey = process.env.SCAN_API_KEY || ""
     const appUrl = process.env.NEXT_PUBLIC_APP_URL || "https://scan-to-synth.vercel.app"
     const apiUrl = `${appUrl.replace(/\/$/, "")}/api/scan/submit`

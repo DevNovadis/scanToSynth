@@ -1,8 +1,13 @@
 import { NextRequest, NextResponse } from "next/server"
 import { mergeMachines } from "@/lib/excel-store"
 import { revalidatePath } from "next/cache"
+import { safeEqual } from "@/lib/auth"
+import { toCellValue } from "@/lib/validation"
 
 export const dynamic = "force-dynamic"
+
+// Un rapport d'agent fait quelques Ko : on refuse ce qui dépasse largement
+const MAX_BODY_BYTES = 64 * 1024
 
 export async function GET() { return NextResponse.json({ status: "OK" }) }
 
@@ -12,21 +17,39 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ error: "SCAN_API_KEY non configurée sur le serveur" }, { status: 503 })
     }
     const apiKey = req.headers.get("x-api-key")
-    if (apiKey !== expectedKey) {
+    if (!apiKey || !safeEqual(apiKey, expectedKey)) {
         return NextResponse.json({ error: "Non autorisé" }, { status: 401 })
     }
 
-    try {
-        const data = await req.json()
-        const { NOM } = data
+    if (Number(req.headers.get("content-length") || 0) > MAX_BODY_BYTES) {
+        return NextResponse.json({ error: "Requête trop volumineuse" }, { status: 413 })
+    }
 
-        if (!NOM) return NextResponse.json({ error: "Nom de machine manquant" }, { status: 400 })
+    try {
+        const raw = await req.text()
+        if (Buffer.byteLength(raw) > MAX_BODY_BYTES) {
+            return NextResponse.json({ error: "Requête trop volumineuse" }, { status: 413 })
+        }
+
+        let data: any
+        try { data = JSON.parse(raw) } catch {
+            return NextResponse.json({ error: "JSON invalide" }, { status: 400 })
+        }
+        if (!data || typeof data !== "object" || Array.isArray(data)) {
+            return NextResponse.json({ error: "Format invalide" }, { status: 400 })
+        }
+
+        const NOM = toCellValue(data.NOM)
+        if (typeof NOM !== "string") return NextResponse.json({ error: "Nom de machine manquant" }, { status: 400 })
 
         // Construire les valeurs exactes attendues de la ligne 1 à 150
         const valeurs = new Array(150).fill(null)
 
-        const w = (r: number, v: any) => {
-            if (v !== undefined && v !== null && v !== "") valeurs[r - 1] = v
+        // toCellValue n'accepte que chaînes et nombres : un objet { formula } ou { hyperlink }
+        // serait sinon interprété par ExcelJS
+        const w = (r: number, v: unknown) => {
+            const value = toCellValue(v)
+            if (value !== null) valeurs[r - 1] = value
         }
 
         valeurs[0] = NOM
@@ -37,17 +60,16 @@ export async function POST(req: NextRequest) {
         w(16, data.GPU1); w(17, data.GPU2)
 
         if (Array.isArray(data.VOLUMES)) {
-            if (data.VOLUMES[0]) w(19, data.VOLUMES[0]); if (data.VOLUMES[1]) w(21, data.VOLUMES[1])
+            w(19, data.VOLUMES[0]); w(21, data.VOLUMES[1])
         }
         if (Array.isArray(data.DISQUES)) {
-            data.DISQUES.forEach((d: string, i: number) => { if (i < 14) w(23 + i, d) })
+            data.DISQUES.slice(0, 14).forEach((d: unknown, i: number) => w(23 + i, d))
         }
         if (Array.isArray(data.RESEAU)) {
-            data.RESEAU.forEach((nic: any, i: number) => {
-                if (i < 4) {
-                    const r = 43 + (i * 6)
-                    w(r, nic.Nom); w(r + 1, nic.Nom); w(r + 2, nic.MAC); w(r + 3, nic.IP); w(r + 4, nic.Masque); w(r + 5, nic.Passerelle)
-                }
+            data.RESEAU.slice(0, 4).forEach((nic: any, i: number) => {
+                if (!nic || typeof nic !== "object") return
+                const r = 43 + (i * 6)
+                w(r, nic.Nom); w(r + 1, nic.Nom); w(r + 2, nic.MAC); w(r + 3, nic.IP); w(r + 4, nic.Masque); w(r + 5, nic.Passerelle)
             })
         }
 
@@ -59,7 +81,7 @@ export async function POST(req: NextRequest) {
 
         return NextResponse.json({ success: true, machine: NOM })
     } catch (e: any) {
-        console.error("ERREUR scan submit:", e.message)
-        return NextResponse.json({ error: e.message || "Erreur interne" }, { status: 500 })
+        console.error("ERREUR scan submit:", e)
+        return NextResponse.json({ error: "Erreur interne" }, { status: 500 })
     }
 }

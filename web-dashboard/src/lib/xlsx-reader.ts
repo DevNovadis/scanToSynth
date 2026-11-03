@@ -59,7 +59,8 @@ export async function loadXlsxSafe(buffer: Buffer | ArrayBuffer): Promise<ExcelJ
 
     // Charger dans ExcelJS
     const workbook = new ExcelJS.Workbook()
-    await workbook.xlsx.load(fixedBuffer)
+    // Les types ExcelJS datent d'avant Buffer<ArrayBufferLike> (Node ≥ 22) : le buffer est bien accepté à l'exécution
+    await workbook.xlsx.load(fixedBuffer as unknown as ExcelJS.Buffer)
     return workbook
 }
 

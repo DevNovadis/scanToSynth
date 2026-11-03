@@ -43,3 +43,6 @@ next-env.d.ts
 # inventaire réel (données sensibles : IP, MAC, n° de série)
 /data/Inventaire_Parc.xlsx
 /data/import_info.json
+
+# paramètres locaux de l'assistant
+/.claude/settings.local.json

@@ -10,29 +10,19 @@ export interface MachineData {
 }
 
 // ---------- Helpers Vercel Blob (dynamic import to avoid errors in local dev) ----------
-// L'inventaire contient des données sensibles (IP, MAC, n° de série) : on écrit en privé.
-// Le repli public ne sert qu'aux anciens stores configurés en public — à migrer vers un store privé.
-async function blobPut(pathname: string, body: Buffer | Uint8Array): Promise<string> {
+// L'inventaire contient des données sensibles (IP, MAC, n° de série) : il n'est stocké que
+// dans un store privé. Pas de repli public : une erreur d'accès remonte au lieu d'exposer les données
+// (ou de faire repartir d'un classeur vide qui écraserait l'inventaire au prochain scan).
+async function blobPut(pathname: string, body: Buffer): Promise<string> {
     const { put } = await import("@vercel/blob")
-    try {
-        const result = await put(pathname, body, { access: "private", addRandomSuffix: false, allowOverwrite: true })
-        return result.url
-    } catch (e: any) {
-        console.warn(`[Blob] Écriture privée impossible (${e?.message}). Store public ? Les données seront accessibles par URL.`)
-        const result = await put(pathname, body, { access: "public", addRandomSuffix: false, allowOverwrite: true })
-        return result.url
-    }
+    const result = await put(pathname, body, { access: "private", addRandomSuffix: false, allowOverwrite: true })
+    return result.url
 }
 
 async function blobGet(pathname: string): Promise<Buffer | null> {
     const { get } = await import("@vercel/blob")
-    let result = null
-    try {
-        // useCache: false pour toujours lire la dernière version écrite
-        result = await get(pathname, { access: "private", useCache: false })
-    } catch {
-        result = await get(pathname, { access: "public" }).catch(() => null)
-    }
+    // useCache: false pour toujours lire la dernière version écrite ; null si le fichier n'existe pas encore
+    const result = await get(pathname, { access: "private", useCache: false })
     if (!result || !result.stream) return null
     return Buffer.from(await new Response(result.stream).arrayBuffer())
 }

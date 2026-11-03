@@ -1,13 +1,25 @@
 import { NextRequest, NextResponse } from "next/server"
 import { getWorkbookBuffer } from "@/lib/excel-store"
+import { checkBasicAuth } from "@/lib/auth"
+import { isValidColumnIds } from "@/lib/validation"
 
-export async function GET() {
+// Défense en profondeur : revérifie l'auth déjà faite par src/proxy.ts
+function isAuthorized(request: NextRequest) {
+    return checkBasicAuth(request.headers.get("authorization")) === "ok"
+}
+
+export async function GET(request: NextRequest) {
+    if (!isAuthorized(request)) return NextResponse.json({ error: "Non autorisé" }, { status: 401 })
     return handleExport()
 }
 
 export async function POST(request: NextRequest) {
+    if (!isAuthorized(request)) return NextResponse.json({ error: "Non autorisé" }, { status: 401 })
     const body = await request.json().catch(() => ({}))
-    const columnIds: number[] | undefined = body.columnIds
+    const columnIds = body?.columnIds
+    if (columnIds !== undefined && !isValidColumnIds(columnIds)) {
+        return NextResponse.json({ error: "Sélection invalide" }, { status: 400 })
+    }
     return handleExport(columnIds)
 }
 
@@ -19,7 +31,7 @@ async function handleExport(columnIds?: number[]) {
             return NextResponse.json({ error: "Fichier inventaire non trouvé. Lancez un scan d'abord." }, { status: 404 })
         }
 
-        return new NextResponse(buffer, {
+        return new NextResponse(new Uint8Array(buffer), {
             status: 200,
             headers: {
                 'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
@@ -29,6 +41,6 @@ async function handleExport(columnIds?: number[]) {
         })
     } catch (error: any) {
         console.error("Erreur Export Excel:", error)
-        return NextResponse.json({ error: error.message }, { status: 500 })
+        return NextResponse.json({ error: "Erreur lors de la génération de l'export" }, { status: 500 })
     }
 }
