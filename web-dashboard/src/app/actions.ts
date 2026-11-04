@@ -5,7 +5,9 @@ import { requireAuth } from "@/lib/auth"
 import { isValidColumnIds } from "@/lib/validation"
 import { revalidatePath, unstable_noStore as noStore } from "next/cache"
 import path from "path"
+import fs from "fs"
 import { spawn } from "child_process"
+import { createHash } from "crypto"
 
 export async function getMachines() {
     noStore() // Force fresh data on every call — no Next.js caching
@@ -122,6 +124,18 @@ export async function deleteMachines(ids: number[]) {
     }
 }
 
+// Script de l'agent figé sur le commit déployé et vérifié par hash avant exécution :
+// un push ultérieur sur master ne change pas le code exécuté sur les machines scannées.
+let agentScriptHash: string | null = null
+function getAgentScriptHash(): string {
+    if (!agentScriptHash) {
+        // Hash du contenu tel que stocké dans git (LF), servi à l'identique par raw.githubusercontent
+        const content = fs.readFileSync(path.join(process.cwd(), "scan-to-cloud.ps1"), "utf8").replace(/\r\n/g, "\n")
+        agentScriptHash = createHash("sha256").update(content).digest("hex").toUpperCase()
+    }
+    return agentScriptHash
+}
+
 // Commande d'installation de l'agent, avec la clé API injectée côté serveur.
 // Accessible uniquement derrière l'authentification du dashboard (voir src/proxy.ts).
 export async function getAgentConfig() {
@@ -129,7 +143,14 @@ export async function getAgentConfig() {
     const apiKey = process.env.SCAN_API_KEY || ""
     const appUrl = process.env.NEXT_PUBLIC_APP_URL || "https://scan-to-synth.vercel.app"
     const apiUrl = `${appUrl.replace(/\/$/, "")}/api/scan/submit`
-    const scriptUrl = "https://raw.githubusercontent.com/DevNovadis/scanToSynth/master/web-dashboard/scan-to-cloud.ps1"
-    const scanCommand = `powershell -ExecutionPolicy Bypass -Command "& { irm '${scriptUrl}' -OutFile $env:TEMP\\scan.ps1; & $env:TEMP\\scan.ps1 -ApiUrl '${apiUrl}' -ApiKey '${apiKey}' }"`
+    const repo = process.env.VERCEL_GIT_REPO_OWNER && process.env.VERCEL_GIT_REPO_SLUG
+        ? `${process.env.VERCEL_GIT_REPO_OWNER}/${process.env.VERCEL_GIT_REPO_SLUG}`
+        : "DevNovadis/scanToSynth"
+    // Hors déploiement git Vercel (dev local), repli sur master : le contrôle de hash
+    // échoue alors si master diffère du script local, ce qui reste sûr
+    const ref = process.env.VERCEL_GIT_COMMIT_SHA || process.env.AGENT_SCRIPT_REF || "master"
+    const scriptUrl = `https://raw.githubusercontent.com/${repo}/${ref}/web-dashboard/scan-to-cloud.ps1`
+    const hash = getAgentScriptHash()
+    const scanCommand = `powershell -ExecutionPolicy Bypass -Command "& { $f = Join-Path $env:TEMP 'scan.ps1'; irm '${scriptUrl}' -OutFile $f; if ((Get-FileHash $f -Algorithm SHA256).Hash -ne '${hash}') { Remove-Item $f; throw 'Script agent altere : hash invalide' }; & $f -ApiUrl '${apiUrl}' -ApiKey '${apiKey}' }"`
     return { apiKey, apiUrl, scanCommand }
 }

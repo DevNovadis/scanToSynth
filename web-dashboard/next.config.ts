@@ -3,7 +3,7 @@ import type { NextConfig } from "next";
 const nextConfig: NextConfig = {
   serverExternalPackages: ["exceljs"],
   outputFileTracingIncludes: {
-    "/**": ["./data/**"],
+    "/**": ["./data/**", "./scan-to-cloud.ps1"],
   },
 };
 
